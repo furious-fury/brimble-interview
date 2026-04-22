@@ -1,20 +1,32 @@
+import { promises as fsp } from "node:fs";
+import path from "node:path";
 import { Router, type Response } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { enqueueDeployment } from "../pipeline/queue.js";
+import { cleanupDeploymentWorkspace } from "../pipeline/workspace/cleanup.js";
+import { extractArchiveToSource, isAllowedArchive } from "../pipeline/workspace/extractArchive.js";
+import { getDeploymentWorkspaceDir, getExtractedSourceDir, ensureDirSync } from "../pipeline/workspace/paths.js";
 import {
   createDeployment,
   deleteDeployment,
   getDeploymentById,
   listDeployments,
+  patchDeploymentFields,
 } from "../services/deploymentService.js";
 import { appendLog, listRecentLogs } from "../services/logService.js";
 import { subscribeToLogs, type LogEventPayload } from "../services/logBus.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { notFoundError } from "../middleware/errorHandler.js";
+import { badRequestError, notFoundError } from "../middleware/errorHandler.js";
 import { createDeploymentBodySchema, listDeploymentsQuerySchema } from "../validation/deployments.js";
 
 const LOG_REPLAY_MAX = 500;
 const HEARTBEAT_MS = 20_000;
+const UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: UPLOAD_MAX_BYTES },
+});
 
 const router = Router();
 
@@ -38,7 +50,12 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const body = createDeploymentBodySchema.parse(req.body);
-    const d = await createDeployment(body);
+    const d = await createDeployment({
+      name: body.name,
+      sourceType: "git",
+      source: body.source,
+      sourceRef: body.ref ?? "main",
+    });
     await appendLog(d.id, {
       stage: "build",
       level: "info",
@@ -46,6 +63,59 @@ router.post(
     });
     enqueueDeployment(d.id);
     res.status(201).json({ data: d });
+  })
+);
+
+function uploadFileExtension(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".tar.gz")) return ".tar.gz";
+  if (lower.endsWith(".tgz")) return ".tgz";
+  if (lower.endsWith(".zip")) return ".zip";
+  return path.extname(filename) || ".bin";
+}
+
+router.post(
+  "/upload",
+  uploadMemory.single("file"),
+  asyncHandler(async (req, res) => {
+    const name = z.string().min(1).max(200).trim().parse((req.body as { name?: unknown }).name);
+    const file = req.file;
+    if (!file) {
+      throw badRequestError('Multipart field "file" is required');
+    }
+    if (!isAllowedArchive(file.originalname)) {
+      throw badRequestError("Only .zip or .tar.gz / .tgz archives are allowed");
+    }
+    const d = await createDeployment({
+      name,
+      sourceType: "upload",
+      source: "pending",
+    });
+    const base = getDeploymentWorkspaceDir(d.id);
+    const uploadPath = path.join(base, "upload" + uploadFileExtension(file.originalname));
+    try {
+      ensureDirSync(base);
+      await fsp.writeFile(uploadPath, file.buffer);
+      await extractArchiveToSource(uploadPath, file.originalname, d.id);
+      await fsp.rm(uploadPath, { force: true });
+      const sourcePath = getExtractedSourceDir(d.id);
+      await patchDeploymentFields(d.id, { source: sourcePath });
+      const updated = await getDeploymentById(d.id);
+      if (!updated) {
+        throw new Error("Deployment record missing after upload");
+      }
+      await appendLog(d.id, {
+        stage: "build",
+        level: "info",
+        message: "Upload extracted. Pipeline queued.",
+      });
+      enqueueDeployment(d.id);
+      res.status(201).json({ data: updated });
+    } catch (e) {
+      await deleteDeployment(d.id).catch(() => {});
+      await cleanupDeploymentWorkspace(d.id).catch(() => {});
+      throw e;
+    }
   })
 );
 

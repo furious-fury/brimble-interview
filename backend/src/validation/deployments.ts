@@ -1,21 +1,21 @@
 import { z } from "zod";
 
+/** JSON POST is git-only; uploads use POST /api/deployments/upload */
 export const createDeploymentBodySchema = z
   .object({
     name: z.string().min(1).max(200).trim(),
-    sourceType: z.enum(["git", "upload"]),
     source: z.string().min(1).max(2000).trim(),
+    /** Branch, tag, or commit; defaults to main in createDeployment if omitted */
+    ref: z.string().min(1).max(500).trim().optional(),
   })
   .superRefine((val, ctx) => {
-    if (val.sourceType === "git") {
-      const ok = /^https?:\/\//i.test(val.source) || val.source.startsWith("git@");
-      if (!ok) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "source must be an http(s) or git@ URL",
-          path: ["source"],
-        });
-      }
+    const ok = /^https?:\/\//i.test(val.source) || val.source.startsWith("git@");
+    if (!ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "source must be an http(s) or git@ URL",
+        path: ["source"],
+      });
     }
   });
 

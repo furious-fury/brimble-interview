@@ -3,7 +3,8 @@ import { getDeploymentById, patchDeploymentFields } from "../services/deployment
 import { appendLog } from "../services/logService.js";
 import { isTerminalStatus } from "./transitions.js";
 import { applyStatusTransition } from "./state.js";
-import { runBuildStage, runDeployStage, runServeStage } from "./stages/stubStages.js";
+import { runBuildStage } from "./stages/buildStage.js";
+import { runDeployStage, runServeStage } from "./stages/stubStages.js";
 import { pipelineEvents } from "./events.js";
 
 const STAGE_TIMEOUT_MS = Number(process.env.PIPELINE_STAGE_TIMEOUT_MS) || 120_000;
@@ -71,7 +72,7 @@ export async function runPipeline(deploymentId: string): Promise<void> {
     await appendLog(deploymentId, {
       stage: "build",
       level: "info",
-      message: `Build stage complete (stub). Image: ${build.imageTag}`,
+      message: `Build stage complete. Image: ${build.imageTag}`,
     });
 
     const afterBuild = await applyStatusTransition(deploymentId, "deploying");
@@ -116,7 +117,7 @@ export async function runPipeline(deploymentId: string): Promise<void> {
     await appendLog(deploymentId, {
       stage: "runtime",
       level: "info",
-      message: `Deployment ${afterDeploy.status}. Replace stubs in Phases 4–7 for production behavior.`,
+      message: `Deployment ${afterDeploy.status}. Replace deploy/serve stubs in Phases 6–7 for production behavior.`,
     });
     pipelineEvents.emitCompleted({ deploymentId });
   } catch (e) {

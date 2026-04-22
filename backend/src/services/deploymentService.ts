@@ -6,6 +6,7 @@ const deploymentSelect = {
   name: true,
   sourceType: true,
   source: true,
+  sourceRef: true,
   status: true,
   imageTag: true,
   containerId: true,
@@ -20,6 +21,7 @@ export type DeploymentDTO = {
   name: string;
   sourceType: string;
   source: string;
+  sourceRef: string | null;
   status: string;
   imageTag: string | null;
   containerId: string | null;
@@ -34,6 +36,7 @@ function toDTO(row: {
   name: string;
   sourceType: string;
   source: string;
+  sourceRef: string | null;
   status: string;
   imageTag: string | null;
   containerId: string | null;
@@ -53,12 +56,14 @@ export async function createDeployment(input: {
   name: string;
   sourceType: "git" | "upload";
   source: string;
+  sourceRef?: string | null;
 }): Promise<DeploymentDTO> {
   const row = await prisma.deployment.create({
     data: {
       name: input.name,
       sourceType: input.sourceType,
       source: input.source,
+      sourceRef: input.sourceRef ?? null,
       status: "pending",
     },
     select: deploymentSelect,
@@ -109,6 +114,8 @@ export async function updateDeploymentStatus(
 }
 
 type RunFields = {
+  source?: string;
+  sourceRef?: string | null;
   imageTag?: string | null;
   containerId?: string | null;
   url?: string | null;

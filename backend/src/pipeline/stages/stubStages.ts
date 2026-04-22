@@ -18,14 +18,6 @@ export type StageContext = {
 };
 
 /**
- * Phase 4 will run Railpack here. Placeholder tag for end-to-end UI.
- */
-export async function runBuildStage(ctx: StageContext): Promise<BuildResult> {
-  const tag = `brimble/stub:${ctx.deployment.id.slice(0, 8)}`;
-  return { imageTag: tag };
-}
-
-/**
  * Phase 6 will start Docker. Placeholder port in range 10000–19999 (see IMPLEMENTATION_PLAN notes).
  */
 export async function runDeployStage(ctx: StageContext, _build: BuildResult): Promise<DeployResult> {

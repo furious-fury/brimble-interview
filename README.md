@@ -9,7 +9,7 @@ A minimal, end-to-end deployment pipeline: submit a project (Git URL or upload),
 - **Data:** SQLite (file-backed, mounted in Compose) via **Prisma 7** with `prisma.config.ts` and `@prisma/adapter-better-sqlite3`
 - **Build:** Railpack
 - **Runtime / ingress:** Docker + Caddy
-- **Pipeline (Phase 3):** In-process queue, validated status transitions (`pending` → `building` → `deploying` → `running` or `failed`), stub build/deploy/serve until Phases 4–7; optional `pipelineEvents` for tests; env `PIPELINE_STAGE_TIMEOUT_MS` for per-stage timeouts
+- **Pipeline (Phase 3+):** In-process queue, validated status transitions (`pending` → `building` → `deploying` → `running` or `failed`); **Phase 4** runs **Railpack** against a per-deployment workspace (git clone or upload extract), streams build logs, tags `brimble/d-<id>:v1` on the host Docker, then cleans the workspace. Deploy and serve are still stubbed until later phases. Env `PIPELINE_STAGE_TIMEOUT_MS` and optional `pipelineEvents` for tests.
 
 ## Prerequisites
 
@@ -48,24 +48,28 @@ Base path: `/api`
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
 | `GET` | `/deployments` | List deployments (optional `?limit=1-500`, default 100) |
-| `POST` | `/deployments` | Create deployment (JSON: `name`, `sourceType` `git` \| `upload`, `source`) |
+| `POST` | `/deployments` | Create from **git** (JSON: `name`, `source` URL, optional `ref` branch/tag, default `main`) |
+| `POST` | `/deployments/upload` | Create from **archive** (`multipart/form-data`: `name`, `file` — `.zip` or `.tar.gz` / `.tgz`, max 100MB) |
 | `GET` | `/deployments/:id` | Get one deployment |
 | `DELETE` | `/deployments/:id` | Delete deployment and logs (stopping containers is a later phase) |
 | `GET` | `/deployments/:id/logs` | **SSE** log stream (events: `log`, `replay_done`, heartbeats) |
 
-`sourceType: "upload"` is accepted and stored; **file uploads** are implemented in a later phase (same field is used for a placeholder path or label until then).
+**Git** `source` must be `https://` or `http://` or `git@…`. For private **HTTPS** repos, set `GIT_TOKEN` in the environment (e.g. GitHub PAT; the backend injects it for `x-access-token` style URLs). `git@` uses SSH on the host and is only as reliable as your agent/socket setup in Docker.
 
-`sourceType: "git"` requires an `http(s)://` or `git@` URL in `source`.
+**Uploads** are only created via `POST /api/deployments/upload` (not the JSON create route).
 
-### Pipeline (Phase 3)
+### Pipeline (build + deploy)
 
-After `POST /api/deployments`, the server enqueues a background run that (with current stubs) updates status through to `running` and sets placeholder `imageTag`, `port`, `url`. **Railpack, real Docker, and Caddy** replace the stubs in later phases.
+After create, the server enqueues a run: **build** uses **Railpack** (needs [BuildKit](https://docs.docker.com/build/buildkit/) via the mounted Docker socket), then **deploy** and **serve** are still **stubs** (placeholder `port` / `url`) until Phases 6–7.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PIPELINE_STAGE_TIMEOUT_MS` | `120000` | Max time (ms) for each of build, deploy, and serve steps |
+| `BRIMBLE_WORKSPACE` | `/data/work` in Compose; `${TMP}/brimble-work` on Windows without env | Per-deployment clone/extract and Railpack `cwd` |
+| `RAILPACK_BIN` | `railpack` | Path to Railpack if not on `PATH` |
+| `GIT_TOKEN` | (unset) | Optional token for private HTTPS git clones |
 
-**Container health checks** (e.g. restart on crash) are **Phase 6**, not implemented in the Phase 3 orchestrator.
+**Container health checks** (e.g. restart on crash) are **Phase 6**, not implemented in the pipeline orchestrator yet.
 
 ## Project layout
 

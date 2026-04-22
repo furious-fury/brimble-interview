@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler } from "express";
+import { MulterError } from "multer";
 import { ZodError } from "zod";
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
@@ -16,10 +17,22 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
     });
     return;
   }
+  if (err instanceof MulterError) {
+    const message =
+      err.code === "LIMIT_FILE_SIZE" ? "Uploaded file is too large" : err.message;
+    res.status(400).json({ error: { code: "UPLOAD_ERROR", message } });
+    return;
+  }
   const code = (err as { code?: string }).code;
   if (code === "NOT_FOUND") {
     res.status(404).json({
       error: { code: "NOT_FOUND", message: (err as Error).message || "Not found" },
+    });
+    return;
+  }
+  if (code === "BAD_REQUEST") {
+    res.status(400).json({
+      error: { code: "BAD_REQUEST", message: (err as Error).message || "Bad request" },
     });
     return;
   }
@@ -35,5 +48,11 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
 export function notFoundError(message: string): Error {
   const e = new Error(message);
   (e as { code?: string }).code = "NOT_FOUND";
+  return e;
+}
+
+export function badRequestError(message: string): Error {
+  const e = new Error(message);
+  (e as { code?: string }).code = "BAD_REQUEST";
   return e;
 }
