@@ -17,6 +17,11 @@ A minimal, end-to-end deployment pipeline: submit a project (Git URL or upload),
 - Docker Engine + Docker Compose v2
 - Git
 
+## Testing
+
+- **Automated:** from `backend/`, run `npm test` (Vitest: pipeline transitions, request validation, HTTP API with a test SQLite DB and mocked pipeline queue / runtime teardown). No Docker required.
+- **Manual / compose:** see [docs/TESTING.md](docs/TESTING.md) for optional `scripts/compose-validate.sh`, a manual E2E checklist, and notes on full-stack or Playwright-style checks.
+
 ## Local development (Docker)
 
 From the repository root:
