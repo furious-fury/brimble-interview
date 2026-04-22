@@ -1,0 +1,51 @@
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    ports:
+      - "80:80"
+      - "2019:2019"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy/dynamic:/etc/caddy/dynamic
+      - caddy_data:/data
+    command: caddy run --config /etc/caddy/Caddyfile --watch
+    depends_on:
+      - backend
+      - frontend
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      CORS_ORIGIN: http://localhost
+      CADDY_ADMIN_URL: http://caddy:2019
+      CADDY_DYNAMIC_DIR: /etc/caddy/dynamic
+      CADDYFILE_PATH: /etc/caddy/Caddyfile
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+      - ./caddy/dynamic:/etc/caddy/dynamic
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      VITE_API_BASE: ""
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  caddy_data: {}
+  backend_node_modules: {}
+  frontend_node_modules: {}

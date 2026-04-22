@@ -1,0 +1,28 @@
+{
+	# Admin API: backend can query config; full JSON patches come in later phases
+	admin 0.0.0.0:2019
+}
+
+# Per-deployment host blocks (see POST /api/caddy/routes)
+import /etc/caddy/dynamic/*.caddy
+
+:80 {
+	# API
+	@api {
+		path /api/*
+	}
+	handle @api {
+		reverse_proxy http://backend:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# Dev UI (Vite)
+	handle {
+		reverse_proxy http://frontend:5173 {
+			header_up Host {host}
+		}
+	}
+}
