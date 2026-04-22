@@ -107,3 +107,28 @@ export async function updateDeploymentStatus(
     return null;
   }
 }
+
+type RunFields = {
+  imageTag?: string | null;
+  containerId?: string | null;
+  url?: string | null;
+  port?: number | null;
+  status?: DeploymentStatus;
+};
+
+/** Patch run metadata and/or status (used by pipeline; status transitions should go through assertCanTransition in pipeline) */
+export async function patchDeploymentFields(
+  id: string,
+  data: RunFields
+): Promise<DeploymentDTO | null> {
+  try {
+    const row = await prisma.deployment.update({
+      where: { id },
+      data,
+      select: deploymentSelect,
+    });
+    return toDTO(row);
+  } catch {
+    return null;
+  }
+}

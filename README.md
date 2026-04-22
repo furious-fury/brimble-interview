@@ -9,6 +9,7 @@ A minimal, end-to-end deployment pipeline: submit a project (Git URL or upload),
 - **Data:** SQLite (file-backed, mounted in Compose) via **Prisma 7** with `prisma.config.ts` and `@prisma/adapter-better-sqlite3`
 - **Build:** Railpack
 - **Runtime / ingress:** Docker + Caddy
+- **Pipeline (Phase 3):** In-process queue, validated status transitions (`pending` → `building` → `deploying` → `running` or `failed`), stub build/deploy/serve until Phases 4–7; optional `pipelineEvents` for tests; env `PIPELINE_STAGE_TIMEOUT_MS` for per-stage timeouts
 
 ## Prerequisites
 
@@ -55,6 +56,16 @@ Base path: `/api`
 `sourceType: "upload"` is accepted and stored; **file uploads** are implemented in a later phase (same field is used for a placeholder path or label until then).
 
 `sourceType: "git"` requires an `http(s)://` or `git@` URL in `source`.
+
+### Pipeline (Phase 3)
+
+After `POST /api/deployments`, the server enqueues a background run that (with current stubs) updates status through to `running` and sets placeholder `imageTag`, `port`, `url`. **Railpack, real Docker, and Caddy** replace the stubs in later phases.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PIPELINE_STAGE_TIMEOUT_MS` | `120000` | Max time (ms) for each of build, deploy, and serve steps |
+
+**Container health checks** (e.g. restart on crash) are **Phase 6**, not implemented in the Phase 3 orchestrator.
 
 ## Project layout
 

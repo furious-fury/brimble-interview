@@ -1,6 +1,6 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
-import { enqueueDeploymentStub } from "../pipeline/stub.js";
+import { enqueueDeployment } from "../pipeline/queue.js";
 import {
   createDeployment,
   deleteDeployment,
@@ -42,9 +42,9 @@ router.post(
     await appendLog(d.id, {
       stage: "build",
       level: "info",
-      message: "Deployment record created. Pipeline is a stub until Phase 3.",
+      message: "Deployment record created. Pipeline queued.",
     });
-    enqueueDeploymentStub(d);
+    enqueueDeployment(d.id);
     res.status(201).json({ data: d });
   })
 );
