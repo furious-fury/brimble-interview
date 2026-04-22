@@ -1,10 +1,13 @@
 import type { DeploymentStatus } from "../generated/prisma/client.js";
+import { destroyDeploymentRuntime } from "../services/deploymentRuntime.js";
 import { getDeploymentById, patchDeploymentFields } from "../services/deploymentService.js";
 import { appendLog } from "../services/logService.js";
+import { startRuntimeLogStream } from "../services/runtimeLogStream.js";
 import { isTerminalStatus } from "./transitions.js";
 import { applyStatusTransition } from "./state.js";
 import { runBuildStage } from "./stages/buildStage.js";
-import { runDeployStage, runServeStage } from "./stages/stubStages.js";
+import { runDeployStage } from "./stages/deployStage.js";
+import { runServeStage } from "./stages/serveStage.js";
 import { pipelineEvents } from "./events.js";
 
 const STAGE_TIMEOUT_MS = Number(process.env.PIPELINE_STAGE_TIMEOUT_MS) || 120_000;
@@ -20,8 +23,13 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 
 async function failPipeline(deploymentId: string, message: string): Promise<void> {
   const d = await getDeploymentById(deploymentId);
-  if (!d) return;
-  if (isTerminalStatus(d.status as DeploymentStatus)) return;
+  if (!d) {
+    return;
+  }
+  if (isTerminalStatus(d.status as DeploymentStatus)) {
+    return;
+  }
+  await destroyDeploymentRuntime(deploymentId);
   try {
     await applyStatusTransition(deploymentId, "failed");
   } catch {
@@ -92,14 +100,17 @@ export async function runPipeline(deploymentId: string): Promise<void> {
       port: deploy.port,
       containerId: deploy.containerId,
     });
+    startRuntimeLogStream(deploymentId, deploy.containerId);
     await appendLog(deploymentId, {
       stage: "deploy",
       level: "info",
-      message: `Deploy stage complete (stub). Port ${deploy.port}, container ${deploy.containerId}`,
+      message: `Deploy stage complete. Port ${deploy.port}, container ${deploy.containerId.slice(0, 12)}…`,
     });
 
     const d2 = await getDeploymentById(deploymentId);
-    if (!d2) return;
+    if (!d2) {
+      return;
+    }
     const run = await withTimeout(
       runServeStage({ deployment: d2 }, deploy),
       STAGE_TIMEOUT_MS,
@@ -109,7 +120,7 @@ export async function runPipeline(deploymentId: string): Promise<void> {
     await appendLog(deploymentId, {
       stage: "runtime",
       level: "info",
-      message: `Serve stage complete (stub). URL: ${run.url}`,
+      message: `URL: ${run.url} (Caddy in Phase 7)`,
     });
 
     const afterDeploy = await applyStatusTransition(deploymentId, "running");
@@ -117,7 +128,7 @@ export async function runPipeline(deploymentId: string): Promise<void> {
     await appendLog(deploymentId, {
       stage: "runtime",
       level: "info",
-      message: `Deployment ${afterDeploy.status}. Replace deploy/serve stubs in Phases 6–7 for production behavior.`,
+      message: `Deployment ${afterDeploy.status}. Health poll active.`,
     });
     pipelineEvents.emitCompleted({ deploymentId });
   } catch (e) {

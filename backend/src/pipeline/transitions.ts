@@ -5,7 +5,7 @@ const ALLOWED: Record<DeploymentStatus, DeploymentStatus[]> = {
   pending: ["building", "failed"],
   building: ["deploying", "failed"],
   deploying: ["running", "failed"],
-  running: [],
+  running: ["failed"],
   failed: [],
 };
 

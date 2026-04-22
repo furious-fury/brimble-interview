@@ -7,6 +7,7 @@ import { enqueueDeployment } from "../pipeline/queue.js";
 import { cleanupDeploymentWorkspace } from "../pipeline/workspace/cleanup.js";
 import { extractArchiveToSource, isAllowedArchive } from "../pipeline/workspace/extractArchive.js";
 import { getDeploymentWorkspaceDir, getExtractedSourceDir, ensureDirSync } from "../pipeline/workspace/paths.js";
+import { destroyDeploymentRuntime } from "../services/deploymentRuntime.js";
 import {
   createDeployment,
   deleteDeployment,
@@ -14,7 +15,7 @@ import {
   listDeployments,
   patchDeploymentFields,
 } from "../services/deploymentService.js";
-import { appendLog, listRecentLogs } from "../services/logService.js";
+import { appendLog, listLogsAfterId, listRecentLogs } from "../services/logService.js";
 import { subscribeToLogs, type LogEventPayload } from "../services/logBus.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { badRequestError, notFoundError } from "../middleware/errorHandler.js";
@@ -119,10 +120,15 @@ router.post(
   })
 );
 
+const logsQuerySchema = z.object({
+  afterId: z.string().cuid().optional(),
+});
+
 router.get(
   "/:id/logs",
   asyncHandler(async (req, res) => {
     const id = idParam.parse(req.params.id);
+    const q = logsQuerySchema.parse(req.query);
     const exists = await getDeploymentById(id);
     if (!exists) {
       throw notFoundError("Deployment not found");
@@ -135,11 +141,20 @@ router.get(
     }
     res.flushHeaders();
 
-    const replay = await listRecentLogs(id, LOG_REPLAY_MAX);
+    let replay: Awaited<ReturnType<typeof listRecentLogs>>;
+    if (q.afterId) {
+      const after = await listLogsAfterId(id, q.afterId, LOG_REPLAY_MAX);
+      if (after === null) {
+        throw badRequestError("Log cursor (afterId) not found for this deployment");
+      }
+      replay = after;
+    } else {
+      replay = await listRecentLogs(id, LOG_REPLAY_MAX);
+    }
     for (const line of replay) {
       sseEvent(res, "log", line);
     }
-    sseEvent(res, "replay_done", { count: replay.length });
+    sseEvent(res, "replay_done", { count: replay.length, incremental: Boolean(q.afterId) });
 
     const unsubscribe = subscribeToLogs(id, (payload: LogEventPayload) => {
       try {
@@ -187,6 +202,7 @@ router.delete(
     if (!ex) {
       throw notFoundError("Deployment not found");
     }
+    await destroyDeploymentRuntime(id);
     const ok = await deleteDeployment(id);
     if (!ok) {
       throw notFoundError("Deployment not found");

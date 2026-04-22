@@ -9,7 +9,7 @@ A minimal, end-to-end deployment pipeline: submit a project (Git URL or upload),
 - **Data:** SQLite (file-backed, mounted in Compose) via **Prisma 7** with `prisma.config.ts` and `@prisma/adapter-better-sqlite3`
 - **Build:** Railpack
 - **Runtime / ingress:** Docker + Caddy
-- **Pipeline (Phase 3+):** In-process queue, validated status transitions (`pending` → `building` → `deploying` → `running` or `failed`); **Phase 4** runs **Railpack** against a per-deployment workspace (git clone or upload extract), streams build logs, tags `brimble/d-<id>:v1` on the host Docker, then cleans the workspace. Deploy and serve are still stubbed until later phases. Env `PIPELINE_STAGE_TIMEOUT_MS` and optional `pipelineEvents` for tests.
+- **Pipeline (Phase 3+):** In-process queue, validated status transitions (`pending` → `building` → `deploying` → `running` or `failed`); **Phase 4** runs **Railpack**; **Phase 6** uses **dockerode** to start the built image with a host port in a configurable range, stream **runtime** logs to the same log API, poll `docker inspect` for unexpected exit, and remove the container on `DELETE` or failure. `url` is `BRIMBLE_APP_PUBLIC_BASE:port` (default `http://localhost:<port>`) until **Phase 7** Caddy. Env `PIPELINE_STAGE_TIMEOUT_MS` and optional `pipelineEvents` for tests.
 
 ## Prerequisites
 
@@ -51,16 +51,20 @@ Base path: `/api`
 | `POST` | `/deployments` | Create from **git** (JSON: `name`, `source` URL, optional `ref` branch/tag, default `main`) |
 | `POST` | `/deployments/upload` | Create from **archive** (`multipart/form-data`: `name`, `file` — `.zip` or `.tar.gz` / `.tgz`, max 100MB) |
 | `GET` | `/deployments/:id` | Get one deployment |
-| `DELETE` | `/deployments/:id` | Delete deployment and logs (stopping containers is a later phase) |
+| `DELETE` | `/deployments/:id` | Stop log follow, stop/remove app container, release host port, delete deployment and logs |
 | `GET` | `/deployments/:id/logs` | **SSE** log stream (events: `log`, `replay_done`, heartbeats) |
+
+**Logs (SSE):** The server first replays the last **500** lines, or only lines **after** a known row with `GET /api/deployments/:id/logs?afterId=<cuid>` (use the `id` from a previous `log` event to avoid duplicating history on reconnect). `replay_done` includes `incremental: true` when `afterId` was used. Each `log` payload is a `LogEntry`-shaped object (`id`, `stage`, `level`, `message`, `timestamp` ISO string). Browsers’ `EventSource` reconnects automatically; if you do not pass `afterId`, you may see overlap—dedupe client-side on `id` or pass the last seen id as `afterId`. No server-side log retention or pruning: logs grow with usage; delete a deployment to remove its log rows (cascade).
 
 **Git** `source` must be `https://` or `http://` or `git@…`. For private **HTTPS** repos, set `GIT_TOKEN` in the environment (e.g. GitHub PAT; the backend injects it for `x-access-token` style URLs). `git@` uses SSH on the host and is only as reliable as your agent/socket setup in Docker.
 
 **Uploads** are only created via `POST /api/deployments/upload` (not the JSON create route).
 
-### Pipeline (build + deploy)
+### Pipeline (build + deploy + runtime)
 
-After create, the server enqueues a run: **build** uses **Railpack** (needs [BuildKit](https://docs.docker.com/build/buildkit/) via the mounted Docker socket), then **deploy** and **serve** are still **stubs** (placeholder `port` / `url`) until Phases 6–7.
+After create, the server enqueues a run: **build** uses **Railpack** (needs [BuildKit](https://docs.docker.com/build/buildkit/) via the mounted Docker socket), then **deploy** runs the image with **dockerode**, publishes **one** container port (default app port **3000** in the image, override `BRIMBLE_CONTAINER_PORT` if your stack listens elsewhere) to a free host port in **BRIMBLE_HOST_PORT_MIN**–**MAX** (default 10000–11000, reconciled from running labeled containers on startup), then **serve** sets `url` and status **`running`**. **Runtime** stdout/stderr is appended with `stage: "runtime"`. A periodic **inspect** (default `BRIMBLE_HEALTH_POLL_MS` 15000) marks the deployment **failed** if the container stops or disappears.
+
+**From the backend container**, the host-published port is reachable as **`http://host.docker.internal:<port>`** on Docker Desktop, not as `127.0.0.1` inside the same container. The stored `url` is for browsers on the **host** (`http://localhost:<port>` by default via `BRIMBLE_APP_PUBLIC_BASE`).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -68,8 +72,11 @@ After create, the server enqueues a run: **build** uses **Railpack** (needs [Bui
 | `BRIMBLE_WORKSPACE` | `/data/work` in Compose; `${TMP}/brimble-work` on Windows without env | Per-deployment clone/extract and Railpack `cwd` |
 | `RAILPACK_BIN` | `railpack` | Path to Railpack if not on `PATH` |
 | `GIT_TOKEN` | (unset) | Optional token for private HTTPS git clones |
-
-**Container health checks** (e.g. restart on crash) are **Phase 6**, not implemented in the pipeline orchestrator yet.
+| `DOCKER_SOCKET_PATH` | `/var/run/docker.sock` (or Windows pipe) | API to Docker for deploy |
+| `BRIMBLE_HOST_PORT_MIN` / `MAX` | `10000` / `11000` | Host port allocation range |
+| `BRIMBLE_CONTAINER_PORT` | `3000` | In-container port the app listens on (map to a host port) |
+| `BRIMBLE_HEALTH_POLL_MS` | `15000` | How often to `inspect` **running** containers |
+| `BRIMBLE_APP_PUBLIC_BASE` | `http://localhost` | Origin in stored `url` (no path; port appended) |
 
 ## Project layout
 

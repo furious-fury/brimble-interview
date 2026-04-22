@@ -5,7 +5,7 @@ import { runRailpackBuild } from "../railpack/runRailpackBuild.js";
 import { cleanupDeploymentWorkspace } from "../workspace/cleanup.js";
 import { gitCloneToWorkspace } from "../workspace/gitClone.js";
 import { getExtractedSourceDir } from "../workspace/paths.js";
-import type { BuildResult, StageContext } from "./stubStages.js";
+import type { BuildResult, StageContext } from "./resultTypes.js";
 
 function imageRefFor(deploymentId: string): string {
   return `brimble/d-${deploymentId}:v1`;

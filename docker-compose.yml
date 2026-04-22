@@ -24,6 +24,11 @@ services:
       DATABASE_URL: file:/data/brimble.db
       BRIMBLE_WORKSPACE: /data/work
       RAILPACK_BIN: railpack
+      DOCKER_SOCKET_PATH: /var/run/docker.sock
+      BRIMBLE_HOST_PORT_MIN: "10000"
+      BRIMBLE_HOST_PORT_MAX: "11000"
+      BRIMBLE_CONTAINER_PORT: "3000"
+      BRIMBLE_HEALTH_POLL_MS: "15000"
       CADDY_ADMIN_URL: http://caddy:2019
       CADDY_DYNAMIC_DIR: /etc/caddy/dynamic
       CADDYFILE_PATH: /etc/caddy/Caddyfile

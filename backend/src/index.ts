@@ -1,6 +1,9 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import { startContainerHealthLoop } from "./services/containerHealth.js";
+import { pingDocker } from "./services/dockerClient.js";
+import { initPortRegistryFromDocker } from "./services/portAllocator.js";
 import { caddyRouter } from "./routes/caddy.js";
 import { deploymentsRouter } from "./routes/deployments.js";
 import { healthRouter } from "./routes/health.js";
@@ -28,6 +31,19 @@ app.get("/", (_req, res) => {
 
 app.use(errorHandler);
 
-app.listen(port, host, () => {
-  console.log(`[brimble-api] http://${host}:${port}`);
-});
+void (async () => {
+  try {
+    await pingDocker();
+  } catch (e) {
+    console.warn("[brimble-api] Docker ping failed — deploy will not work until the socket is reachable:", e);
+  }
+  try {
+    await initPortRegistryFromDocker();
+  } catch (e) {
+    console.warn("[brimble-api] Port registry init failed:", e);
+  }
+  startContainerHealthLoop();
+  app.listen(port, host, () => {
+    console.log(`[brimble-api] http://${host}:${port}`);
+  });
+})();

@@ -1,13 +1,8 @@
 import { EventEmitter } from "node:events";
+import type { LogEntry } from "../types/logEntry.js";
 
-export type LogEventPayload = {
-  id: string;
-  deploymentId: string;
-  stage: string;
-  level: string;
-  message: string;
-  timestamp: string;
-};
+/** In-memory broadcast payload; same as {@link LogEntry} for every persisted line. */
+export type LogEventPayload = LogEntry;
 
 const bus = new EventEmitter();
 bus.setMaxListeners(0);
