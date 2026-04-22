@@ -1,3 +1,4 @@
+import { removeDeploymentRouteForId } from "../caddyClient.js";
 import { getDeploymentById } from "./deploymentService.js";
 import { getDocker } from "./dockerClient.js";
 import { releaseHostPort } from "./portAllocator.js";
@@ -26,6 +27,10 @@ export async function stopAndRemoveContainer(containerId: string | null | undefi
  */
 export async function destroyDeploymentRuntime(deploymentId: string): Promise<void> {
   stopRuntimeLogStream(deploymentId);
+  const removed = await removeDeploymentRouteForId(deploymentId);
+  if (!removed.ok) {
+    console.warn(`[brimble] Caddy route not removed: ${removed.note}`);
+  }
   const d = await getDeploymentById(deploymentId);
   if (!d) {
     return;

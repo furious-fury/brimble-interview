@@ -29,6 +29,8 @@ services:
       BRIMBLE_HOST_PORT_MAX: "11000"
       BRIMBLE_CONTAINER_PORT: "3000"
       BRIMBLE_HEALTH_POLL_MS: "15000"
+      BRIMBLE_APPS_BASE_DOMAIN: localhost
+      BRIMBLE_DOCKER_UPSTREAM_HOST: host.docker.internal
       CADDY_ADMIN_URL: http://caddy:2019
       CADDY_DYNAMIC_DIR: /etc/caddy/dynamic
       CADDYFILE_PATH: /etc/caddy/Caddyfile

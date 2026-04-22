@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --color-accent: #4f46e5;
+  --color-accent-hover: #4338ca;
+  --radius-chrome: 1rem;
+  --radius-pill: 9999px;
+}
+
+:root {
+  --surface-main: #ffffff;
+  --surface-glass: rgba(255, 255, 255, 0.22);
+  --page-bg-start: #e2e8f0;
+  --page-bg-end: #cbd5e1;
+  --text-muted: #64748b;
+  --log-bg: #0f172a;
+  --log-fg: #e2e8f0;
+}
+
+body {
+  @apply m-0 min-h-screen font-sans antialiased text-slate-900;
+  background: linear-gradient(
+    160deg,
+    var(--page-bg-start) 0%,
+    var(--page-bg-end) 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Monospace for log lines */
+.log-line {
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas,
+    monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}

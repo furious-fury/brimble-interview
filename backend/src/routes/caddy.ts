@@ -3,11 +3,8 @@ import {
   applyBody,
   dynamicDir,
   pingCaddyAdmin,
-  touchCaddyfile,
-  writeDeploymentRouteSnippet,
+  registerDeploymentRouteWithReload,
 } from "../caddyClient.js";
-
-const mainCaddyfile = process.env.CADDYFILE_PATH || "/etc/caddy/Caddyfile";
 
 const memory: Array<{
   host: string;
@@ -35,18 +32,7 @@ caddyRouter.post("/caddy/routes", async (req, res) => {
     return;
   }
   const reg = parsed.data;
-  const w = await writeDeploymentRouteSnippet(reg);
-  if (w.file) {
-    try {
-      if (process.env.SKIP_CADDY_RELOAD === "1") {
-        // tests / dev without file touch
-      } else {
-        await touchCaddyfile(mainCaddyfile);
-      }
-    } catch (e) {
-      console.warn("Could not touch Caddyfile; snippet may not reload until manual reload", e);
-    }
-  }
+  const w = await registerDeploymentRouteWithReload(reg);
   const entry = {
     host: reg.host,
     upstream: reg.upstream,

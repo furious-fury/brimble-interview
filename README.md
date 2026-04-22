@@ -9,7 +9,7 @@ A minimal, end-to-end deployment pipeline: submit a project (Git URL or upload),
 - **Data:** SQLite (file-backed, mounted in Compose) via **Prisma 7** with `prisma.config.ts` and `@prisma/adapter-better-sqlite3`
 - **Build:** Railpack
 - **Runtime / ingress:** Docker + Caddy
-- **Pipeline (Phase 3+):** In-process queue, validated status transitions (`pending` → `building` → `deploying` → `running` or `failed`); **Phase 4** runs **Railpack**; **Phase 6** uses **dockerode** to start the built image with a host port in a configurable range, stream **runtime** logs to the same log API, poll `docker inspect` for unexpected exit, and remove the container on `DELETE` or failure. `url` is `BRIMBLE_APP_PUBLIC_BASE:port` (default `http://localhost:<port>`) until **Phase 7** Caddy. Env `PIPELINE_STAGE_TIMEOUT_MS` and optional `pipelineEvents` for tests.
+- **Pipeline (Phase 3+):** In-process queue, validated status transitions; **Phase 4** **Railpack**; **Phase 6** **dockerode** (host ports, runtime logs, health, teardown); **Phase 7** adds a Caddy vhost and writes `caddy/dynamic/<id>.caddy` so the stored **`url` is `http://<name>-<id>.<domain>`** on port **80** (e.g. `http://my-app-a1b2c3d4.localhost` when `CADDY_DYNAMIC_DIR` is set). If `CADDY_DYNAMIC_DIR` is missing, the pipeline falls back to `BRIMBLE_APP_PUBLIC_BASE:<port>`. Env `PIPELINE_STAGE_TIMEOUT_MS` and optional `pipelineEvents` for tests.
 
 ## Prerequisites
 
@@ -40,6 +40,8 @@ docker compose up --build
 
 In **Docker**, the backend uses a named volume at `/data` and `DATABASE_URL=file:/data/brimble.db`. The image entrypoint runs `prisma migrate deploy` before starting the dev server.
 
+**Phase 7 check (manual):** With `docker compose up`, create a deployment; open the stored **`url`** in a browser (e.g. `http://my-app-xxxxxxxx.localhost` on port 80). The request should hit Caddy, which proxies to the app on the published host port. `GET /api/caddy/status` should show the admin ping. Deleting the deployment should remove the corresponding file under `caddy/dynamic/`.
+
 ## API (Phase 2)
 
 Base path: `/api`
@@ -51,7 +53,7 @@ Base path: `/api`
 | `POST` | `/deployments` | Create from **git** (JSON: `name`, `source` URL, optional `ref` branch/tag, default `main`) |
 | `POST` | `/deployments/upload` | Create from **archive** (`multipart/form-data`: `name`, `file` — `.zip` or `.tar.gz` / `.tgz`, max 100MB) |
 | `GET` | `/deployments/:id` | Get one deployment |
-| `DELETE` | `/deployments/:id` | Stop log follow, stop/remove app container, release host port, delete deployment and logs |
+| `DELETE` | `/deployments/:id` | Stop log follow, remove Caddy snippet, stop/remove app container, release host port, delete deployment and logs |
 | `GET` | `/deployments/:id/logs` | **SSE** log stream (events: `log`, `replay_done`, heartbeats) |
 
 **Logs (SSE):** The server first replays the last **500** lines, or only lines **after** a known row with `GET /api/deployments/:id/logs?afterId=<cuid>` (use the `id` from a previous `log` event to avoid duplicating history on reconnect). `replay_done` includes `incremental: true` when `afterId` was used. Each `log` payload is a `LogEntry`-shaped object (`id`, `stage`, `level`, `message`, `timestamp` ISO string). Browsers’ `EventSource` reconnects automatically; if you do not pass `afterId`, you may see overlap—dedupe client-side on `id` or pass the last seen id as `afterId`. No server-side log retention or pruning: logs grow with usage; delete a deployment to remove its log rows (cascade).
@@ -62,9 +64,9 @@ Base path: `/api`
 
 ### Pipeline (build + deploy + runtime)
 
-After create, the server enqueues a run: **build** uses **Railpack** (needs [BuildKit](https://docs.docker.com/build/buildkit/) via the mounted Docker socket), then **deploy** runs the image with **dockerode**, publishes **one** container port (default app port **3000** in the image, override `BRIMBLE_CONTAINER_PORT` if your stack listens elsewhere) to a free host port in **BRIMBLE_HOST_PORT_MIN**–**MAX** (default 10000–11000, reconciled from running labeled containers on startup), then **serve** sets `url` and status **`running`**. **Runtime** stdout/stderr is appended with `stage: "runtime"`. A periodic **inspect** (default `BRIMBLE_HEALTH_POLL_MS` 15000) marks the deployment **failed** if the container stops or disappears.
+After create, the server enqueues a run: **build** (Railpack + BuildKit) → **deploy** (container with published host port) → **serve** (writes a Caddy snippet: `host { reverse_proxy http://BRIMBLE_DOCKER_UPSTREAM_HOST:port }` and sets **`url`** to `http://<vhost>` when `CADDY_DYNAMIC_DIR` is set). **Runtime** logs use `stage: "runtime"`. A periodic **inspect** (`BRIMBLE_HEALTH_POLL_MS`) can mark a deployment **failed** if the container stops.
 
-**From the backend container**, the host-published port is reachable as **`http://host.docker.internal:<port>`** on Docker Desktop, not as `127.0.0.1` inside the same container. The stored `url` is for browsers on the **host** (`http://localhost:<port>` by default via `BRIMBLE_APP_PUBLIC_BASE`).
+**Caddy** reaches the app via **`http://host.docker.internal:<hostPort>`** (default), because the app’s port is published on the **Docker host**, not on the Caddy network. Override with `BRIMBLE_DOCKER_UPSTREAM_HOST` if your setup differs. Without `CADDY_DYNAMIC_DIR`, **`url` falls back to** `BRIMBLE_APP_PUBLIC_BASE:<port>` (direct access, no vhost).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -76,13 +78,16 @@ After create, the server enqueues a run: **build** uses **Railpack** (needs [Bui
 | `BRIMBLE_HOST_PORT_MIN` / `MAX` | `10000` / `11000` | Host port allocation range |
 | `BRIMBLE_CONTAINER_PORT` | `3000` | In-container port the app listens on (map to a host port) |
 | `BRIMBLE_HEALTH_POLL_MS` | `15000` | How often to `inspect` **running** containers |
-| `BRIMBLE_APP_PUBLIC_BASE` | `http://localhost` | Origin in stored `url` (no path; port appended) |
+| `BRIMBLE_APP_PUBLIC_BASE` | `http://localhost` | Fallback `url` when `CADDY_DYNAMIC_DIR` is unset (origin only; port appended) |
+| `CADDY_DYNAMIC_DIR` / `CADDYFILE_PATH` | see `.env.example` | Required for Caddy vhosts; same paths in backend + Caddy containers |
+| `BRIMBLE_APPS_BASE_DOMAIN` | `localhost` | Right-hand side of the app host (`<slug>-<id8>.<domain>`) |
+| `BRIMBLE_DOCKER_UPSTREAM_HOST` | `host.docker.internal` | Where Caddy should send traffic (host-mapped app port) |
 
 ## Project layout
 
 - `backend/` — TypeScript API and pipeline (future)
 - `frontend/` — Vite + React app
-- `caddy/` — Caddyfile and (later) shared config fragments for dynamic routes
+- `caddy/` — Caddyfile and per-deployment `dynamic/*.caddy` snippets (written by the backend in Phase 7)
 
 ## License
 

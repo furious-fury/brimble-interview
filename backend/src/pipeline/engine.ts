@@ -120,7 +120,7 @@ export async function runPipeline(deploymentId: string): Promise<void> {
     await appendLog(deploymentId, {
       stage: "runtime",
       level: "info",
-      message: `URL: ${run.url} (Caddy in Phase 7)`,
+      message: `URL: ${run.url}`,
     });
 
     const afterDeploy = await applyStatusTransition(deploymentId, "running");
