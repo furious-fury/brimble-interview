@@ -21,12 +21,14 @@ services:
       HOST: 0.0.0.0
       PORT: "3000"
       CORS_ORIGIN: http://localhost
+      DATABASE_URL: file:/data/brimble.db
       CADDY_ADMIN_URL: http://caddy:2019
       CADDY_DYNAMIC_DIR: /etc/caddy/dynamic
       CADDYFILE_PATH: /etc/caddy/Caddyfile
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules
+      - brimble_data:/data
       - ./caddy/dynamic:/etc/caddy/dynamic
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
       - /var/run/docker.sock:/var/run/docker.sock
@@ -49,3 +51,4 @@ volumes:
   caddy_data: {}
   backend_node_modules: {}
   frontend_node_modules: {}
+  brimble_data: {}

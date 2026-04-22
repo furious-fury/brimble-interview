@@ -27,3 +27,6 @@ data/
 
 # Cursor
 .cursor/
+
+# Prisma 7 generated client
+backend/src/generated/

@@ -5,12 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "build": "prisma generate && tsc",
+    "start": "node dist/index.js",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma generate && prisma migrate dev",
+    "db:deploy": "prisma generate && prisma migrate deploy",
+    "db:push": "prisma db push"
   },
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.0.0",
+    "@prisma/client": "^7.0.0",
+    "better-sqlite3": "^12.0.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^4.21.2",
+    "prisma": "^7.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

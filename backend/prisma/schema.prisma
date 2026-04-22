@@ -1,0 +1,66 @@
+// https://pris.ly/d/prisma-schema
+// v7: URL lives in prisma.config.ts; client output path is required.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum SourceType {
+  git
+  upload
+}
+
+enum DeploymentStatus {
+  pending
+  building
+  deploying
+  running
+  failed
+}
+
+enum LogStage {
+  build
+  deploy
+  runtime
+}
+
+enum LogLevel {
+  info
+  warn
+  error
+  debug
+}
+
+model Deployment {
+  id          String             @id @default(cuid())
+  name        String
+  sourceType  SourceType
+  source      String
+  status      DeploymentStatus   @default(pending)
+  imageTag    String?
+  containerId String?
+  url         String?
+  port        Int?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  logs        Log[]
+
+  @@index([updatedAt])
+}
+
+model Log {
+  id            String   @id @default(cuid())
+  deploymentId  String
+  deployment    Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  stage         LogStage
+  level         LogLevel
+  message       String
+  timestamp     DateTime @default(now())
+
+  @@index([deploymentId, timestamp])
+}
