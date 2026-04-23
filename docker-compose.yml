@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     # Bind to localhost to avoid exposing a registry publicly.
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:5001:5000"
 
   # Railpack needs BuildKit. TCP on 1234 is used so the backend (sibling container) can connect;
   # `docker-container://` often fails from inside another container with "failed to get buildkit information".
@@ -72,7 +72,7 @@ services:
       BUILDKIT_HOST: tcp://buildkit:1234
       # Local registry: BuildKit pushes to service DNS, Docker daemon pulls via host loopback.
       BRIMBLE_REGISTRY_PUSH_HOST: registry:5000
-      BRIMBLE_REGISTRY_PULL_HOST: 127.0.0.1:5000
+      BRIMBLE_REGISTRY_PULL_HOST: 127.0.0.1:5001
       # WSL2: "sending tarball" to Docker can exceed 30m; override locally if needed
       PIPELINE_BUILD_TIMEOUT_MS: "3600000"
       PIPELINE_STAGE_TIMEOUT_MS: "120000"

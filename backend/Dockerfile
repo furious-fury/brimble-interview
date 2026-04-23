@@ -3,7 +3,7 @@
 # better-sqlite3 (native) needs a compiler. Railpack's linux release is a static musl binary and runs here fine.
 FROM moby/buildkit:v0.29.0 AS buildkit_bin
 
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 ARG RAILPACK_VERSION=v0.23.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ openssl git unzip curl ca-certificates \
@@ -34,7 +34,7 @@ CMD ["npm", "run", "dev"]
 FROM base AS build
 RUN npm run build
 
-FROM node:20-bookworm-slim AS production
+FROM node:22-bookworm-slim AS production
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ openssl \
   && rm -rf /var/lib/apt/lists/*
