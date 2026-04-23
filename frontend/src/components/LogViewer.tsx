@@ -16,15 +16,19 @@ const STAGE_FILTERS: Array<"all" | LogStageName> = [
 function levelClass(level: LogLevelName): string {
   switch (level) {
     case "error":
-      return "text-red-400";
+      return "text-red-400 font-medium";
     case "warn":
-      return "text-amber-300";
+      return "text-amber-400";
     case "debug":
       return "text-slate-500";
     case "info":
     default:
-      return "text-emerald-200/90";
+      return "text-slate-300";
   }
+}
+
+function stageClass(): string {
+  return "text-slate-400";
 }
 
 type Props = { deploymentId: string };
@@ -184,7 +188,7 @@ export function LogViewer({ deploymentId, status, createdAt, updatedAt }: LogVie
         {buildElapsed && (
           <div className="text-xs text-slate-500 tabular-nums">
             {status === "building" ? "Build elapsed: " : "Build time: "}
-            <span className="text-slate-300">{buildElapsed}</span>
+            <span className="text-slate-700">{buildElapsed}</span>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-1.5">
@@ -193,10 +197,10 @@ export function LogViewer({ deploymentId, status, createdAt, updatedAt }: LogVie
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${
+              className={`rounded-sm px-2.5 py-1 text-xs font-medium capitalize transition border ${
                 filter === f
-                  ? "bg-white/20 text-white"
-                  : "bg-slate-700/80 text-slate-300 hover:bg-slate-600"
+                  ? "border-slate-800 bg-slate-800 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
               }`}
             >
               {f}
@@ -210,27 +214,29 @@ export function LogViewer({ deploymentId, status, createdAt, updatedAt }: LogVie
         </div>
       </div>
       <div
-        className="log-line max-h-[min(50vh,420px)] overflow-auto rounded-2xl border border-slate-600/50 bg-slate-950 p-3 text-slate-200"
-        style={{ minHeight: "12rem" }}
+        className="max-h-[min(70vh,600px)] overflow-auto rounded-sm border border-slate-700 bg-slate-800 p-4 font-mono text-sm"
+        style={{ minHeight: "16rem" }}
         role="log"
         aria-live="polite"
       >
         {display.length === 0 && (
-          <p className="p-2 text-slate-500">No log lines yet.</p>
+          <p className="text-slate-500">No log lines yet.</p>
         )}
         {display.map((line) => (
           <div
             key={line.id}
-            className="flex flex-wrap gap-x-2 break-words border-b border-slate-800/60 py-1 pr-1 last:border-0"
+            className="flex flex-wrap gap-x-3 break-words border-b border-slate-700/50 py-1.5 pr-2 last:border-0"
           >
             <span className="shrink-0 text-slate-500 tabular-nums">
               {timeFmt(line.timestamp)}
             </span>
-            <span className="shrink-0 text-slate-400">[{line.stage}]</span>
+            <span className={`shrink-0 ${stageClass()}`}>
+              [{line.stage}]
+            </span>
             <span className={`shrink-0 ${levelClass(line.level)}`}>
               {line.level}
             </span>
-            <span className="min-w-0 text-slate-200">{line.message}</span>
+            <span className="min-w-0 text-slate-300">{line.message}</span>
           </div>
         ))}
         <div ref={bottomRef} />

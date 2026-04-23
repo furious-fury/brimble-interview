@@ -35,3 +35,6 @@ backend/src/generated/
 # (Git never ignores already-tracked files; use `git rm --cached caddy/dynamic/<file>.caddy` once to untrack.)
 caddy/dynamic/*
 !caddy/dynamic/00-placeholder.caddy
+
+
+/keypair

@@ -51,11 +51,11 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
         }
         m.mutate();
       }}
-      className="flex max-w-lg flex-col gap-4"
+      className="flex max-w-lg flex-col gap-5"
     >
       <p className="text-sm text-slate-500">
-        Upload a <code className="rounded bg-slate-100 px-1">.zip</code> or{" "}
-        <code className="rounded bg-slate-100 px-1">.tar.gz</code> of your
+        Upload a <code className="font-mono text-slate-600">.zip</code> or{" "}
+        <code className="font-mono text-slate-600">.tar.gz</code> of your
         app root (max 100MB).
       </p>
       <div>
@@ -67,9 +67,10 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
         </label>
         <input
           id="up-name"
-          className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-slate-900 shadow-sm outline-none ring-indigo-500/20 focus:ring-2"
+          className="w-full rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-slate-400"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. my-app"
         />
       </div>
       <div>
@@ -88,21 +89,21 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
             setDrag(false);
             pick(e.dataTransfer.files[0]);
           }}
-          className={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center text-sm transition-colors ${
+          className={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed px-4 py-8 text-center text-sm transition-colors ${
             drag
-              ? "border-indigo-400 bg-indigo-50/80"
-              : "border-slate-200 bg-slate-50/50 hover:border-slate-300"
+              ? "border-slate-400 bg-slate-100"
+              : "border-slate-200 bg-slate-50 hover:border-slate-300"
           }`}
         >
           <FileArchive
-            className="h-8 w-8 text-slate-400"
-            strokeWidth={1.25}
+            className="h-7 w-7 text-slate-400"
+            strokeWidth={1.5}
           />
           {file ? (
-            <span className="font-medium text-slate-800">{file.name}</span>
+            <span className="font-medium text-slate-700">{file.name}</span>
           ) : (
-            <span className="text-slate-600">
-              Drop a file here or <span className="text-indigo-600">browse</span>
+            <span className="text-slate-500">
+              Drop a file here or <span className="text-slate-700 underline">browse</span>
             </span>
           )}
           <input
@@ -115,7 +116,7 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
         </label>
       </div>
       {localError && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {localError}
         </p>
       )}
@@ -123,9 +124,9 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
         <button
           type="submit"
           disabled={m.isPending}
-          className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center justify-center rounded-sm bg-slate-800 px-4 py-2 text-sm font-medium text-blue-50 transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {m.isPending ? "Uploading…" : "Create deployment"}
+          {m.isPending ? "Uploading…" : "Upload and deploy"}
         </button>
       </div>
     </form>

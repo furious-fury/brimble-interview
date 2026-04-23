@@ -29,3 +29,5 @@ tmp
 
 Dockerfile
 docker-compose.yml
+
+/keypair

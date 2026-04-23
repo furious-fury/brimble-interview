@@ -3,6 +3,7 @@ import express from "express";
 import { caddyRouter } from "./routes/caddy.js";
 import { deploymentsRouter } from "./routes/deployments.js";
 import { healthRouter } from "./routes/health.js";
+import { reposRouter } from "./routes/repos.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 /**
@@ -22,6 +23,7 @@ export function buildApp(): express.Express {
 
   app.use("/api", healthRouter);
   app.use("/api", caddyRouter);
+  app.use("/api/repos", reposRouter);
   app.use("/api/deployments", deploymentsRouter);
 
   app.get("/", (_req, res) => {

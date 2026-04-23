@@ -9,7 +9,19 @@ import { ApiError } from "../api/client.js";
 
 function formatWhen(iso: string) {
   try {
-    return new Date(iso).toLocaleString();
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return d.toLocaleDateString();
   } catch {
     return iso;
   }
@@ -28,10 +40,10 @@ export function DeploymentList() {
 
   if (q.isLoading) {
     return (
-      <div className="space-y-3">
-        <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
-        <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
-        <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+      <div className="space-y-4">
+        <div className="h-20 animate-pulse rounded-sm bg-slate-100" />
+        <div className="h-20 animate-pulse rounded-sm bg-slate-100" />
+        <div className="h-20 animate-pulse rounded-sm bg-slate-100" />
       </div>
     );
   }
@@ -42,13 +54,13 @@ export function DeploymentList() {
         ? q.error.message
         : (q.error as Error).message;
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+      <div className="rounded-sm border border-red-200 bg-red-50 p-4 text-sm text-red-700">
         <p className="font-medium">Could not load deployments</p>
         <p className="mt-1">{msg}</p>
         <button
           type="button"
           onClick={() => void q.refetch()}
-          className="mt-3 rounded-lg bg-red-100 px-3 py-1.5 text-sm font-medium text-red-900 hover:bg-red-200"
+          className="mt-3 rounded-sm border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
         >
           Retry
         </button>
@@ -59,10 +71,10 @@ export function DeploymentList() {
   const data = q.data ?? [];
   if (!data.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-10 text-center">
+      <div className="rounded-sm border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
         <p className="font-medium text-slate-700">No deployments yet</p>
         <p className="mt-1 text-sm text-slate-500">
-          Create one from the &quot;New deployment&quot; tab to get started.
+          Create one from the "New deployment" tab to get started.
         </p>
       </div>
     );
@@ -70,15 +82,15 @@ export function DeploymentList() {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-slate-500">
-          {data.length} deployment{data.length === 1 ? "" : "s"}{" "}
-          {q.isFetching && <span className="text-slate-400">(updating…)</span>}
+          {data.length} deployment{data.length === 1 ? "" : "s"}
+          {q.isFetching && <span className="ml-2 text-slate-400">(updating…)</span>}
         </p>
         <button
           type="button"
           onClick={() => void q.refetch()}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 rounded-sm border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-slate-300"
         >
           <RefreshCw
             className={`h-3.5 w-3.5 ${q.isFetching ? "animate-spin" : ""}`}
@@ -86,108 +98,62 @@ export function DeploymentList() {
           Refresh
         </button>
       </div>
-      <div className="md:hidden space-y-3">
+
+      <div className="space-y-0 divide-y divide-slate-200 rounded-sm border border-slate-200 bg-white">
         {data.map((d) => (
           <div
             key={d.id}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+            className="p-4 transition hover:bg-slate-50"
           >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <Link
-                  to="/deployments/$deploymentId"
-                  params={{ deploymentId: d.id }}
-                  className="font-semibold text-indigo-700 hover:underline"
-                >
-                  {d.name}
-                </Link>
-                <p className="mt-1 font-mono text-xs text-slate-500">
-                  {d.sourceType === "git" ? d.source : "upload"}
-                </p>
-              </div>
-              <StatusBadge status={d.status} />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-              {d.url ? (
-                <a
-                  href={d.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-indigo-600"
-                >
-                  Open app
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              ) : (
-                <span className="text-slate-400">No URL</span>
-              )}
-              <span
-                className="tabular-nums text-xs text-slate-500"
-                title={d.updatedAt}
-              >
-                {formatWhen(d.updatedAt)}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 md:block">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/80">
-              <th className="p-3 font-medium text-slate-600">Name</th>
-              <th className="p-3 font-medium text-slate-600">Status</th>
-              <th className="p-3 font-medium text-slate-600">Source</th>
-              <th className="p-3 font-medium text-slate-600">URL</th>
-              <th className="p-3 font-medium text-slate-600">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((d) => (
-              <tr
-                key={d.id}
-                className="border-b border-slate-100 transition hover:bg-slate-50/80"
-              >
-                <td className="p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-3">
                   <Link
                     to="/deployments/$deploymentId"
                     params={{ deploymentId: d.id }}
-                    className="font-medium text-indigo-700 hover:underline"
+                    className="font-medium text-slate-800 hover:underline"
                   >
                     {d.name}
                   </Link>
-                </td>
-                <td className="p-3">
                   <StatusBadge status={d.status} />
-                </td>
-                <td className="max-w-[200px] truncate p-3 font-mono text-xs text-slate-600">
-                  {d.sourceType === "git" ? d.source : "upload"}
-                </td>
-                <td className="p-3">
+                </div>
+                
+                <div className="mt-1.5 flex items-center gap-2 text-xs">
+                  {d.imageTag ? (
+                    <code className="font-mono text-slate-500">{d.imageTag}</code>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                  {d.sourceType === "git" && (
+                    <>
+                      <span className="text-slate-300">·</span>
+                      <span className="font-mono text-slate-400">{d.sourceRef || "main"}</span>
+                    </>
+                  )}
+                </div>
+
+                <div className="mt-2 flex items-center gap-4 text-sm">
                   {d.url ? (
                     <a
                       href={d.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                      className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-800 hover:underline"
                     >
-                      Open
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      {d.url.replace(/^https?:\/\//, "")}
+                      <ExternalLink className="h-3 w-3" />
                     </a>
                   ) : (
-                    <span className="text-slate-400">—</span>
+                    <span className="text-slate-400">No URL</span>
                   )}
-                </td>
-                <td
-                  className="p-3 tabular-nums text-slate-500"
-                  title={d.updatedAt}
-                >
-                  {formatWhen(d.updatedAt)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <span className="text-xs text-slate-400 tabular-nums">
+                    {formatWhen(d.updatedAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

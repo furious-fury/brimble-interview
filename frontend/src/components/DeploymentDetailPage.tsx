@@ -43,9 +43,9 @@ export function DeploymentDetailPage() {
   if (q.isLoading) {
     return (
       <div className="space-y-4">
-        <div className="h-6 w-40 animate-pulse rounded bg-slate-100" />
-        <div className="h-32 animate-pulse rounded-2xl bg-slate-100" />
-        <div className="h-64 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="h-6 w-40 animate-pulse rounded-sm bg-slate-100" />
+        <div className="h-32 animate-pulse rounded-sm bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-sm bg-slate-100" />
       </div>
     );
   }
@@ -57,14 +57,14 @@ export function DeploymentDetailPage() {
         : (q.error as Error).message;
     const is404 = q.error instanceof ApiError && q.error.status === 404;
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800">
+      <div className="rounded-sm border border-red-200 bg-red-50 p-6 text-sm text-red-700">
         <p className="font-medium">
           {is404 ? "Deployment not found" : "Could not load deployment"}
         </p>
         <p className="mt-1">{msg}</p>
         <Link
           to="/"
-          className="mt-4 inline-block text-sm font-medium text-indigo-700 hover:underline"
+          className="mt-4 inline-block text-sm font-medium text-slate-700 hover:underline"
         >
           Back to hub
         </Link>
@@ -79,25 +79,25 @@ export function DeploymentDetailPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-8">
         <Link
           to="/"
-          className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700"
         >
           <ArrowLeft className="h-4 w-4" />
           Hub
         </Link>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
               Deployment
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900 md:text-3xl">
+            <h1 className="mt-1 text-2xl font-semibold text-slate-800">
               {d.name}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={d.status} />
-              <span className="font-mono text-xs text-slate-500">{d.id}</span>
+              <code className="font-mono text-xs text-slate-400">{d.id.slice(0, 8)}</code>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -106,7 +106,7 @@ export function DeploymentDetailPage() {
                 href={d.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-indigo-600 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300"
               >
                 Open app
                 <ExternalLink className="h-4 w-4" />
@@ -116,7 +116,7 @@ export function DeploymentDetailPage() {
               type="button"
               onClick={() => setConfirmOpen(true)}
               disabled={del.isPending}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
               Delete
@@ -126,28 +126,28 @@ export function DeploymentDetailPage() {
       </div>
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+        <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
             Source
           </p>
-          <p className="mt-1 break-all font-mono text-sm text-slate-800">
+          <p className="mt-1 break-all font-mono text-sm text-slate-700">
             {d.source}
           </p>
           {d.sourceRef && (
-            <p className="mt-1 text-sm text-slate-600">Ref: {d.sourceRef}</p>
+            <p className="mt-1 text-sm text-slate-500">Ref: {d.sourceRef}</p>
           )}
         </div>
-        <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+        <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
             Network
           </p>
-          <p className="mt-1 text-sm text-slate-800">
+          <p className="mt-1 text-sm text-slate-700">
             {d.port != null ? (
               <span>
-                Port <span className="tabular-nums">{d.port}</span> (host)
+                Port <span className="font-mono tabular-nums">{d.port}</span> (host)
               </span>
             ) : (
-              <span className="text-slate-500">—</span>
+              <span className="text-slate-400">—</span>
             )}
           </p>
         </div>
@@ -162,19 +162,19 @@ export function DeploymentDetailPage() {
 
       {confirmOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/60 p-4 sm:items-center"
           role="dialog"
           aria-modal
           aria-labelledby="delete-confirm-title"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-sm bg-white p-6">
             <h2
               id="delete-confirm-title"
-              className="text-lg font-semibold text-slate-900"
+              className="text-lg font-semibold text-slate-800"
             >
               Delete this deployment?
             </h2>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-slate-500">
               The container, logs, and Caddy route will be removed. This cannot
               be undone.
             </p>
@@ -182,7 +182,7 @@ export function DeploymentDetailPage() {
               <button
                 type="button"
                 onClick={() => setConfirmOpen(false)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-sm border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -190,7 +190,7 @@ export function DeploymentDetailPage() {
                 type="button"
                 onClick={() => del.mutate()}
                 disabled={del.isPending}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-sm bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
               >
                 {del.isPending ? "Deleting…" : "Delete"}
               </button>
