@@ -99,10 +99,10 @@ To deploy on a cloud server:
 cd backend
 cp .env.example .env
 
-# 2. Edit .env and set your public IP (replace 13.50.5.50 with your actual IP):
-#   CORS_ORIGIN=http://13.50.5.50,http://localhost
-#   BRIMBLE_APPS_BASE_DOMAIN=13.50.5.50.nip.io
-#   BRIMBLE_APP_PUBLIC_BASE=http://13.50.5.50
+# 2. Edit .env and set your public IP (replace <YOUR_PUBLIC_IP> with your actual IP):
+#   CORS_ORIGIN=http://<YOUR_PUBLIC_IP>,http://localhost
+#   BRIMBLE_APPS_BASE_DOMAIN=<YOUR_PUBLIC_IP>.nip.io
+#   BRIMBLE_APP_PUBLIC_BASE=http://<YOUR_PUBLIC_IP>
 
 # 3. Start services
 cd ..
@@ -134,17 +134,47 @@ Why I built it this way:
 **SQLite + Prisma 7 for persistence**
 - Single-node constraint means no need for distributed PostgreSQL
 - File-backed database simplifies backups and local development
-- Prisma 7's new client generator improves cold-start performance
 
-**Caddy dynamic vhosts for deployed apps**
-- No DNS configuration needed: `*.nip.io` resolves any IP (e.g., `app-123.13.50.5.50.nip.io`)
+**Caddy dynamic vhosts + nip.io for zero-config DNS**
+- **nip.io** is a wildcard DNS service: `*.<YOUR_PUBLIC_IP>.nip.io` resolves to `<YOUR_PUBLIC_IP>`
+- No DNS setup needed—any IP works immediately (e.g., `app-123.<YOUR_PUBLIC_IP>.nip.io` → `<YOUR_PUBLIC_IP>`)
 - Caddy watches `caddy/dynamic/*.caddy` files and reloads automatically
-- No API calls needed from backend—just write files to shared volume
+- Backend writes vhost snippets to shared volume, no API calls needed
 
 **In-memory job queue (not Redis)**
 - Single-node deployment: one worker process is sufficient
 - `async` library queue provides backpressure and sequential processing
 - Zero additional infrastructure (no Redis container)
+
+## Future Improvements
+
+Given another weekend, I would add:
+
+**Multi-node scaling**
+- Replace in-memory queue with Redis + worker pool for horizontal scaling
+- Registry migration: ECR/Docker Hub for multi-node image access
+- SQLite → PostgreSQL with connection pooling for concurrent workers
+
+**Security hardening**
+- Per-deployment network isolation (Docker networks instead of default bridge)
+- Resource quotas: CPU/memory limits and container OOM handling
+- Secret management: encrypted env var storage with at-rest encryption (never log secrets to build output)
+
+**Developer experience**
+- Webhook auto-deploy: GitHub/GitLab → trigger redeploy on push
+- Build caching: Persistent layer cache volumes to speed up repeat builds
+- Preview environments: Branch-based deployments with automatic cleanup
+- Deployment rollbacks: Keep last N images, instant revert to previous version
+
+**Observability**
+- Structured logging (JSON) with correlation IDs across pipeline stages
+- Prometheus metrics: build duration, deploy success rate, queue depth
+- Distributed tracing: OpenTelemetry spans from API → pipeline → Docker
+
+**Production readiness**
+- HTTPS with Let's Encrypt (Caddy handles this, but needs public DNS)
+- Database backups: Automated SQLite → S3 snapshots or Postgres WAL archiving
+- Graceful shutdown: Drain queue, finish in-progress builds before restart
 
 ## Project layout
 
