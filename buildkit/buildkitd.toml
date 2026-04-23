@@ -1,0 +1,6 @@
+# BuildKit daemon config for local, insecure registry.
+# This avoids "http: server gave HTTP response to HTTPS client" when pushing to registry:5000.
+
+[registry."registry:5000"]
+  http = true
+  insecure = true

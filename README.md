@@ -38,6 +38,15 @@ docker compose up --build
 
 Compose includes a **`buildkit`** service (`moby/buildkit`, **privileged**) with `container_name: buildkit`, listening on **TCP 1234** (for sibling containers like the backend) and the default **unix socket** (for `buildctl` defaults inside the BuildKit container). The backend sets **`BUILDKIT_HOST=tcp://buildkit:1234`** so Railpack can reach BuildKit (plain `docker-container://` from inside the backend often fails with “failed to get buildkit information”). If you change the backend base image (e.g. Alpine to Debian), you may still need to **recreate the `backend_node_modules` volume** so native modules match the new libc.
 
+### Local registry (avoid `sending tarball`)
+
+Some environments (notably WSL2 and small VMs) can hang during BuildKit’s **docker-load export** (`exporting… / sending tarball`). Compose includes a local Docker registry on **`127.0.0.1:5000`**. The pipeline pushes built images to the registry and then pulls by tag before starting the container. This avoids the tar-stream handoff.
+
+Environment:
+
+- `BRIMBLE_REGISTRY_PUSH_HOST` (default `registry:5000` inside Compose)
+- `BRIMBLE_REGISTRY_PULL_HOST` (default `127.0.0.1:5000` for the Docker daemon)
+
 ## Local development (without Docker)
 
 1. **Database (Phase 2):** From `backend/`, copy env and create the SQLite file:
@@ -83,11 +92,13 @@ After create, the server enqueues a run: **build** (Railpack + BuildKit) → **d
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PIPELINE_BUILD_TIMEOUT_MS` | `3600000` (60m) in Compose; `3600000` in code if unset | Max time (ms) for the **build** stage (clone, BuildKit, image load to Docker) |
+| `PIPELINE_BUILD_TIMEOUT_MS` | `3600000` (60m) in Compose; `3600000` in code if unset | Max time (ms) for the **build** stage (clone, BuildKit, export/push) |
 | `PIPELINE_STAGE_TIMEOUT_MS` | `120000` | Max time (ms) for each of **deploy** and **serve** |
 | `BRIMBLE_WORKSPACE` | `/data/work` in Compose; `${TMP}/brimble-work` on Windows without env | Per-deployment clone/extract and Railpack `cwd` |
 | `RAILPACK_BIN` | `railpack` | Path to Railpack if not on `PATH` |
 | `BUILDKIT_HOST` | `tcp://buildkit:1234` in Compose | BuildKit gRPC (plain TCP) for Railpack; see BuildKit / Railpack above |
+| `BRIMBLE_REGISTRY_PUSH_HOST` | `registry:5000` in Compose | Registry host used by the build (push) |
+| `BRIMBLE_REGISTRY_PULL_HOST` | `127.0.0.1:5000` in Compose | Registry host used by the Docker daemon (pull) |
 | `GIT_TOKEN` | (unset) | Optional token for private HTTPS git clones |
 | `DOCKER_SOCKET_PATH` | `/var/run/docker.sock` (or Windows pipe) | API to Docker for deploy |
 | `BRIMBLE_HOST_PORT_MIN` / `MAX` | `10000` / `11000` | Host port allocation range |

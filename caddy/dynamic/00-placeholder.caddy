@@ -1,5 +1,5 @@
 # Reserved label for Brimble: ensures `import` glob matches at least one file.
 # Remove when you have real deployment routes; the API also writes new *.caddy files.
-brimble-dummy.localhost {
+http://brimble-dummy.localhost {
 	respond 204
 }

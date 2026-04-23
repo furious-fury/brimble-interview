@@ -1,4 +1,11 @@
 services:
+  registry:
+    image: registry:2
+    restart: unless-stopped
+    # Bind to localhost to avoid exposing a registry publicly.
+    ports:
+      - "127.0.0.1:5000:5000"
+
   # Railpack needs BuildKit. TCP on 1234 is used so the backend (sibling container) can connect;
   # `docker-container://` often fails from inside another container with "failed to get buildkit information".
   buildkit:
@@ -6,9 +13,13 @@ services:
     container_name: buildkit
     privileged: true
     restart: unless-stopped
+    volumes:
+      - ./buildkit/buildkitd.toml:/etc/buildkit/buildkitd.toml:ro
     # Listen on both a unix socket (for in-container buildctl defaults) and TCP (for sibling containers).
     command:
       [
+        "--config",
+        "/etc/buildkit/buildkitd.toml",
         "--addr",
         "unix:///run/buildkit/buildkitd.sock",
         "--addr",
@@ -28,12 +39,18 @@ services:
     depends_on:
       - backend
       - frontend
+    # Must match backend: deployment routes use host.docker.internal:<published port>
+    # to reach the host-mapped app container; without this, name resolves to an
+    # unreachable address on Linux (blank page through :80, direct :port still works).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   backend:
     build:
       context: ./backend
       target: dev
     depends_on:
+      - registry
       - buildkit
     environment:
       HOST: 0.0.0.0
@@ -53,6 +70,9 @@ services:
       CADDY_DYNAMIC_DIR: /etc/caddy/dynamic
       CADDYFILE_PATH: /etc/caddy/Caddyfile
       BUILDKIT_HOST: tcp://buildkit:1234
+      # Local registry: BuildKit pushes to service DNS, Docker daemon pulls via host loopback.
+      BRIMBLE_REGISTRY_PUSH_HOST: registry:5000
+      BRIMBLE_REGISTRY_PULL_HOST: 127.0.0.1:5000
       # WSL2: "sending tarball" to Docker can exceed 30m; override locally if needed
       PIPELINE_BUILD_TIMEOUT_MS: "3600000"
       PIPELINE_STAGE_TIMEOUT_MS: "120000"

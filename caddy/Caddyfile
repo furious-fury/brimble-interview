@@ -1,28 +1,37 @@
 {
 	# Admin API: backend can query config; full JSON patches come in later phases
 	admin 0.0.0.0:2019
+	# Local dev: keep HTTP; don't redirect to HTTPS for *.localhost hostnames.
+	auto_https off
 }
 
 # Per-deployment host blocks (see POST /api/caddy/routes)
 import /etc/caddy/dynamic/*.caddy
 
+# Hub + API only when Host is a Brimble “loopback” name. Using `http://127.0.0.1 { … }` as
+# the site address would bind a *dedicated* 127.0.0.1 listener and steal every request to
+# 127.0.0.1:80 (including `http://<app>-<id>.localhost` → 127.0.0.1), so deployment vhosts
+# from `import` would never run and the Vite proxy could return a blank page.
 :80 {
-	# API
-	@api {
-		path /api/*
-	}
-	handle @api {
-		reverse_proxy http://backend:3000 {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote}
-			header_up X-Forwarded-Proto {scheme}
+	@brimble_dev host localhost 127.0.0.1 ::1
+	handle @brimble_dev {
+		# API
+		@api {
+			path /api/*
 		}
-	}
+		handle @api {
+			reverse_proxy http://backend:3000 {
+				header_up Host {host}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Proto {scheme}
+			}
+		}
 
-	# Dev UI (Vite)
-	handle {
-		reverse_proxy http://frontend:5173 {
-			header_up Host {host}
+		# Dev UI (Vite)
+		handle {
+			reverse_proxy http://frontend:5173 {
+				header_up Host {host}
+			}
 		}
 	}
 }

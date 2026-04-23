@@ -2,7 +2,6 @@ import type { Container } from "dockerode";
 import { getDocker } from "../../services/dockerClient.js";
 import {
   allocateHostPort,
-  containerListenPort,
   LABEL_MANAGED,
   releaseHostPort,
 } from "../../services/portAllocator.js";
@@ -10,16 +9,34 @@ import type { BuildResult, DeployResult, StageContext } from "./resultTypes.js";
 
 const LABEL_DEPLOYMENT_ID = "brimble.deployment.id";
 
+async function ensureImageAvailable(image: string): Promise<void> {
+  const docker = getDocker();
+  try {
+    await docker.getImage(image).inspect();
+    return;
+  } catch {
+    // pull below
+  }
+  await new Promise<void>((resolve, reject) => {
+    docker.pull(image, (err, stream) => {
+      if (err) return reject(err);
+      if (!stream) return reject(new Error("Docker pull returned no stream"));
+      docker.modem.followProgress(stream, (e) => (e ? reject(e) : resolve()));
+    });
+  });
+}
+
 export async function runDeployStage(ctx: StageContext, build: BuildResult): Promise<DeployResult> {
   const docker = getDocker();
   const deploymentId = ctx.deployment.id;
-  const cPort = containerListenPort();
+  const cPort = build.containerPort;
   const image = build.imageTag;
   const hostPort = allocateHostPort();
   let releaseOnError = true;
   let created: Container | undefined;
 
   try {
+    await ensureImageAvailable(image);
     created = await docker.createContainer({
       Image: image,
       Labels: {

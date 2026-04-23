@@ -2,6 +2,7 @@ import type { DeploymentDTO } from "../../services/deploymentService.js";
 
 export type BuildResult = {
   imageTag: string;
+  containerPort: number;
 };
 
 export type DeployResult = {

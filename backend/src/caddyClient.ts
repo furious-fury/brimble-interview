@@ -3,12 +3,10 @@ import path from "node:path";
 import { z } from "zod";
 
 const applyBody = z.object({
-  /** e.g. myapp.localhost (no port) */
+  /** e.g. myapp.localhost (no port) — also used for the on-disk name: `myapp.localhost.caddy` */
   host: z.string().min(1).max(253),
   /** e.g. http://172.20.0.5:10001 */
   upstream: z.string().url(),
-  /** file-safe id for the snippet; defaults from host */
-  id: z.string().min(1).max(120).optional(),
 });
 
 export type CaddyRouteRegistration = z.infer<typeof applyBody>;
@@ -33,10 +31,15 @@ export async function pingCaddyAdmin(): Promise<{
   }
 }
 
+/** `higher-abc12345.localhost` → same string with unsafe chars stripped (Caddy vhost = filename stem). */
+export function caddyRouteSnippetFileBasename(vhost: string): string {
+  return vhost.trim().replace(/[^a-zA-Z0-9._-]+/g, "-");
+}
+
 /**
  * Writes a Caddyfile snippet and touches the main Caddyfile so a watch-based
  * reload (see docker-compose) picks up new deployment routes.
- * Snippet format: one site block per file.
+ * Snippet format: one site block per file, named from the vhost (e.g. `my-app-a1b2c3d4.localhost.caddy`).
  */
 export async function writeDeploymentRouteSnippet(
   reg: CaddyRouteRegistration
@@ -47,9 +50,10 @@ export async function writeDeploymentRouteSnippet(
       note: "CADDY_DYNAMIC_DIR not set; route stored in memory only",
     };
   }
-  const id = reg.id ?? reg.host.replace(/[^a-zA-Z0-9._-]+/g, "-");
-  const fileName = path.join(dynamicDir, `${id}.caddy`);
-  const block = `${reg.host} {\n\treverse_proxy ${reg.upstream}\n}\n`;
+  const fileName = path.join(dynamicDir, `${caddyRouteSnippetFileBasename(reg.host)}.caddy`);
+  // Prefix `http://` so the site binds to :80. A bare `app.localhost { }` address is treated
+  // as HTTPS-capable and can end up on :443 only, while browsers use http:// for these URLs.
+  const block = `http://${reg.host} {\n\treverse_proxy ${reg.upstream}\n}\n`;
   await mkdir(path.dirname(fileName), { recursive: true });
   await writeFile(fileName, block, "utf8");
   return { file: fileName, note: "Snippet written" };
@@ -83,31 +87,48 @@ export async function registerDeploymentRouteWithReload(
 }
 
 /**
- * Removes `CADDY_DYNAMIC_DIR/<deploymentId>.caddy` and touches the main Caddyfile. Safe on ENOENT.
+ * Removes Caddy route snippets: `<vhost>.caddy` (when vhost is set) and legacy `<deploymentId>.caddy`.
  */
-export async function removeDeploymentRouteForId(deploymentId: string): Promise<{
+export async function removeDeploymentCaddyRoute(opts: {
+  vhost?: string;
+  /** Deployment id — removes older on-disk `cmobc3gzj0000….caddy` files from before vhost-based names. */
+  legacyDeploymentId: string;
+}): Promise<{
   ok: boolean;
   note: string;
 }> {
   if (!dynamicDir) {
     return { ok: true, note: "CADDY_DYNAMIC_DIR not set" };
   }
-  const fileName = path.join(dynamicDir, `${deploymentId}.caddy`);
-  try {
-    await unlink(fileName);
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException;
-    if (err?.code === "ENOENT") {
-      return { ok: true, note: "Snippet already absent" };
-    }
-    return { ok: false, note: err?.message ?? String(e) };
+  const files = new Set<string>();
+  if (opts.vhost) {
+    files.add(path.join(dynamicDir, `${caddyRouteSnippetFileBasename(opts.vhost)}.caddy`));
   }
-  try {
-    if (process.env.SKIP_CADDY_RELOAD !== "1") {
-      await touchCaddyfile(getMainCaddyfilePath());
+  files.add(path.join(dynamicDir, `${opts.legacyDeploymentId}.caddy`));
+  let lastErr: NodeJS.ErrnoException | undefined;
+  let removed = 0;
+  for (const fileName of files) {
+    try {
+      await unlink(fileName);
+      removed++;
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException;
+      if (err?.code !== "ENOENT") {
+        lastErr = err;
+      }
     }
-  } catch (e) {
-    console.warn("Could not touch Caddyfile after route removal", e);
+  }
+  if (lastErr) {
+    return { ok: false, note: lastErr.message };
+  }
+  if (removed > 0) {
+    try {
+      if (process.env.SKIP_CADDY_RELOAD !== "1") {
+        await touchCaddyfile(getMainCaddyfilePath());
+      }
+    } catch (e) {
+      console.warn("Could not touch Caddyfile after route removal", e);
+    }
   }
   return { ok: true, note: "Removed" };
 }

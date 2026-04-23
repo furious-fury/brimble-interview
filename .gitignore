@@ -30,3 +30,8 @@ data/
 
 # Prisma 7 generated client
 backend/src/generated/
+
+# Caddy: generated per deployment (`<vhost>.caddy`). `00-placeholder.caddy` is the only one to commit.
+# (Git never ignores already-tracked files; use `git rm --cached caddy/dynamic/<file>.caddy` once to untrack.)
+caddy/dynamic/*
+!caddy/dynamic/00-placeholder.caddy
