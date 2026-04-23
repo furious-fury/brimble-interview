@@ -89,6 +89,11 @@ export function LogViewer({ deploymentId, status, createdAt, updatedAt }: LogVie
       };
 
       es.addEventListener("log", onLog);
+      es.addEventListener("logs_cleared", () => {
+        // Clear local logs when backend signals a fresh start (redeploy)
+        setLogs([]);
+        lastIdRef.current = null;
+      });
       es.addEventListener("replay_done", () => {
         if (active) setConn("live");
       });

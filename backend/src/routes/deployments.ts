@@ -17,7 +17,8 @@ import {
   resetDeploymentForRedeploy,
 } from "../services/deploymentService.js";
 import { appendLog, clearLogs, listLogsAfterId, listRecentLogs } from "../services/logService.js";
-import { subscribeToLogs, type LogEventPayload } from "../services/logBus.js";
+import { emitLogControlEvent } from "../services/logBus.js";
+import { subscribeToLogs, type LogEventPayload, type LogControlEvent } from "../services/logBus.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { badRequestError, notFoundError } from "../middleware/errorHandler.js";
 import { normalizeGitSourceForCreate } from "../lib/gitSourceNormalize.js";
@@ -170,9 +171,14 @@ router.get(
     }
     sseEvent(res, "replay_done", { count: replay.length, incremental: Boolean(q.afterId) });
 
-    const unsubscribe = subscribeToLogs(id, (payload: LogEventPayload) => {
+    const unsubscribe = subscribeToLogs(id, (payload: LogEventPayload | LogControlEvent) => {
       try {
-        sseEvent(res, "log", payload);
+        // Handle control events (e.g., logs_cleared on redeploy)
+        if ("type" in payload && payload.type === "logs_cleared") {
+          sseEvent(res, "logs_cleared", {});
+        } else {
+          sseEvent(res, "log", payload as LogEventPayload);
+        }
       } catch {
         // client gone
       }
@@ -241,6 +247,8 @@ router.post(
 
     // Clear all logs for fresh start
     await clearLogs(id);
+    // Notify any connected SSE clients to clear their logs
+    emitLogControlEvent(id, { type: "logs_cleared" });
 
     // Reset deployment to pending state
     const reset = await resetDeploymentForRedeploy(id);

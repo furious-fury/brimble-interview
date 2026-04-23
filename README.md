@@ -9,7 +9,7 @@ A minimal, end-to-end deployment pipeline: submit a project (Git URL or upload),
 - **Data:** SQLite (file-backed, mounted in Compose) via **Prisma 7** with `prisma.config.ts` and `@prisma/adapter-better-sqlite3`
 - **Build:** Railpack (BuildKit)
 - **Runtime / ingress:** Docker + Caddy
-- **Pipeline (Phase 3+):** In-process queue, validated status transitions; **Phase 4** **Railpack**; **Phase 6** **dockerode** (host ports, runtime logs, health, teardown); **Phase 7** adds a Caddy vhost and writes `caddy/dynamic/<id>.caddy` so the stored **`url` is `http://<name>-<id>.<domain>`** on port **80** (e.g. `http://my-app-a1b2c3d4.localhost` when `CADDY_DYNAMIC_DIR` is set). If `CADDY_DYNAMIC_DIR` is missing, the pipeline falls back to `BRIMBLE_APP_PUBLIC_BASE:<port>`. Env `PIPELINE_BUILD_TIMEOUT_MS`, `PIPELINE_STAGE_TIMEOUT_MS`, and optional `pipelineEvents` for tests.
+- **Pipeline:** In-process queue with validated status transitions; builds with Railpack + BuildKit; deploys containers with dockerode (host port allocation, runtime log streaming, health polling, teardown); writes Caddy vhost snippets to `caddy/dynamic/<id>.caddy` so deployed apps get URLs like `http://<name>-<id>.<domain>` on port **80** (e.g., `http://my-app-a1b2c3d4.localhost`). Configurable via `PIPELINE_BUILD_TIMEOUT_MS` (default 60m for Railpack image pulls), `PIPELINE_STAGE_TIMEOUT_MS` (2m for deploy/serve), and optional `pipelineEvents` for testing.
 
 ## Prerequisites
 
@@ -31,7 +31,7 @@ docker compose up --build
 ```
 
 - App UI and API: **http://localhost** (Caddy on port 80; proxies `/api` to the API and other paths to the Vite dev server in development)
-- Caddy admin API: **http://localhost:2019** (used by the backend in later phases for route updates; do not expose publicly)
+- Caddy admin API: **http://localhost:2019** (used by the backend for dynamic route updates; do not expose publicly)
 - The API exposes `GET /api/health` for a quick health check
 
 ### BuildKit / Railpack (Docker)
@@ -40,78 +40,59 @@ Compose includes a **`buildkit`** service (`moby/buildkit`, **privileged**) with
 
 ### Local registry (avoid `sending tarball`)
 
-Some environments (notably WSL2 and small VMs) can hang during BuildKit’s **docker-load export** (`exporting… / sending tarball`). Compose includes a local Docker registry on **`127.0.0.1:5000`**. The pipeline pushes built images to the registry and then pulls by tag before starting the container. This avoids the tar-stream handoff.
+Some environments (notably WSL2 and small VMs) can hang during BuildKit’s **docker-load export** (`exporting… / sending tarball`). Compose includes a local Docker registry on **`127.0.0.1:5001`** (avoids conflicts with WSL2/Windows services on port 5000). The pipeline pushes built images to the registry and then pulls by tag before starting the container. This avoids the tar-stream handoff.
 
 Environment:
 
 - `BRIMBLE_REGISTRY_PUSH_HOST` (default `registry:5000` inside Compose)
-- `BRIMBLE_REGISTRY_PULL_HOST` (default `127.0.0.1:5000` for the Docker daemon)
+- `BRIMBLE_REGISTRY_PULL_HOST` (default `127.0.0.1:5001` for the Docker daemon)
 
-## Local development (without Docker)
+## Testing deployment routing
 
-1. **Database (Phase 2):** From `backend/`, copy env and create the SQLite file:
-   - `cp .env.example .env` (default `DATABASE_URL` is `file:./prisma/dev.db`)
-   - Connection and migrations are configured in `prisma.config.ts` (Prisma 7).
-   - `npx prisma generate && npx prisma migrate dev` (or `db:migrate` script; run after schema changes)
-2. **API:** `cd backend && npm install && npm run dev` (listens on `http://127.0.0.1:3000` by default)
-3. **UI:** `cd frontend && npm install && npm run dev` (Vite, typically `http://127.0.0.1:5173`)
+With `docker compose up`, create a deployment; open the stored **`url`** in a browser (e.g. `http://my-app-xxxxxxxx.localhost` on port 80). The request should hit Caddy, which proxies to the app on the published host port. `GET /api/caddy/status` should show the admin ping. Deleting the deployment should remove the corresponding file under `caddy/dynamic/`.
 
-In **Docker**, the backend uses a named volume at `/data` and `DATABASE_URL=file:/data/brimble.db`. The image entrypoint runs `prisma migrate deploy` before starting the dev server.
-
-**Phase 7 check (manual):** With `docker compose up`, create a deployment; open the stored **`url`** in a browser (e.g. `http://my-app-xxxxxxxx.localhost` on port 80). The request should hit Caddy, which proxies to the app on the published host port. `GET /api/caddy/status` should show the admin ping. Deleting the deployment should remove the corresponding file under `caddy/dynamic/`.
-
-## API (Phase 2)
+## API
 
 Base path: `/api`
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
-| `GET` | `/deployments` | List deployments (optional `?limit=1-500`, default 100) |
-| `POST` | `/deployments` | Create from **git** (JSON: `name`, `source` URL, optional `ref` branch/tag, default `main`) |
-| `POST` | `/deployments/upload` | Create from **archive** (`multipart/form-data`: `name`, `file` — `.zip` or `.tar.gz` / `.tgz`, max 100MB) |
-| `GET` | `/deployments/:id` | Get one deployment |
-| `DELETE` | `/deployments/:id` | Stop log follow, remove Caddy snippet, stop/remove app container, release host port, delete deployment and logs |
-| `GET` | `/deployments/:id/logs` | **SSE** log stream (events: `log`, `replay_done`, heartbeats) |
+| `GET` | `/deployments` | List deployments (`?limit=1-500`, default 100) |
+| `POST` | `/deployments` | Create from git (JSON: `name`, `source`, `ref?`, `envVars?`) |
+| `POST` | `/deployments/upload` | Create from ZIP/tar.gz archive (`multipart/form-data`, max 100MB) |
+| `GET` | `/deployments/:id` | Get deployment details |
+| `POST` | `/deployments/:id/redeploy` | Destroy runtime, clear logs, rebuild & redeploy |
+| `DELETE` | `/deployments/:id` | Stop container, remove Caddy route, delete logs & record |
+| `GET` | `/deployments/:id/logs` | **SSE** log stream (replay last 500, then live) |
+| `GET` | `/repos/branches?url=` | List git branches for a repository |
 
-**Logs (SSE):** The server first replays the last **500** lines, or only lines **after** a known row with `GET /api/deployments/:id/logs?afterId=<cuid>` (use the `id` from a previous `log` event to avoid duplicating history on reconnect). `replay_done` includes `incremental: true` when `afterId` was used. Each `log` payload is a `LogEntry`-shaped object (`id`, `stage`, `level`, `message`, `timestamp` ISO string). Browsers’ `EventSource` reconnects automatically; if you do not pass `afterId`, you may see overlap—dedupe client-side on `id` or pass the last seen id as `afterId`. No server-side log retention or pruning: logs grow with usage; delete a deployment to remove its log rows (cascade).
+**Log Streaming (SSE):** `GET /api/deployments/:id/logs` opens an EventSource. The server replays the last 500 logs, then streams new ones. Use `?afterId=<cuid>` to resume without duplicates. Events: `log` (payload: `{id, stage, level, message, timestamp}`), `replay_done`, `logs_cleared` (on redeploy), and heartbeats. No server-side log pruning—delete the deployment to clear logs.
 
-**Git** `source` must be `https://` or `http://` or `git@…`. For private **HTTPS** repos, set `GIT_TOKEN` in the environment (e.g. GitHub PAT; the backend injects it for `x-access-token` style URLs). `git@` uses SSH on the host and is only as reliable as your agent/socket setup in Docker.
+**Pipeline Stages:** `pending` → `building` (clone, Railpack, BuildKit) → `deploying` (allocate port, start container) → `running` (Caddy vhost active, health polling). On failure: `failed`. Runtime logs stream with `stage: "runtime"`. Health checks every `BRIMBLE_HEALTH_POLL_MS` (15s) auto-mark stopped containers as failed.
 
-**Uploads** are only created via `POST /api/deployments/upload` (not the JSON create route).
+**Git Sources:** HTTPS (`https://`), HTTP (`http://`), or SSH (`git@`). For private HTTPS repos, set `GIT_TOKEN` (GitHub PAT) for `x-access-token` style auth. SSH depends on host agent/socket setup in Docker.
 
-### Pipeline (build + deploy + runtime)
-
-After create, the server enqueues a run: **build** (Railpack + BuildKit) → **deploy** (container with published host port) → **serve** (writes a Caddy snippet: `host { reverse_proxy http://BRIMBLE_DOCKER_UPSTREAM_HOST:port }` and sets **`url`** to `http://<vhost>` when `CADDY_DYNAMIC_DIR` is set). **Runtime** logs use `stage: "runtime"`. A periodic **inspect** (`BRIMBLE_HEALTH_POLL_MS`) can mark a deployment **failed** if the container stops.
-
-**Caddy** reaches the app via **`http://host.docker.internal:<hostPort>`** (default), because the app’s port is published on the **Docker host**, not on the Caddy network. Override with `BRIMBLE_DOCKER_UPSTREAM_HOST` if your setup differs. Without `CADDY_DYNAMIC_DIR`, **`url` falls back to** `BRIMBLE_APP_PUBLIC_BASE:<port>` (direct access, no vhost).
-
-**Build timeouts:** A short per-stage cap breaks **first Railpack runs** (image pulls) and especially **`sending tarball`** (BuildKit → Docker), which on **WSL2 + Docker Desktop** can take **30+ minutes** with little log output. **`PIPELINE_BUILD_TIMEOUT_MS`** defaults to **60 minutes** in Compose and in code. Set it higher (e.g. `7200000` for 2h) if builds still time out. **`PIPELINE_STAGE_TIMEOUT_MS`** still applies to **deploy** and **serve** (2 minutes each). On build timeout, the server **sends SIGTERM to the `railpack` process**.
-
-**Testing with Docker Desktop:** Ensure **Resources** (CPU/RAM/disk) are adequate and the disk is not full (`docker system df`). During a stuck `sending tarball`, run `docker stats` and confirm the **buildkit** container shows **block I/O** moving. To compare without Brimble, you can `docker compose exec backend sh` and in `/data/work/<id>/source` run `railpack build --name test:local .` (same slowness confirms I/O, not the app). For a fair speed test, use **Linux bare metal** or **Docker on Linux** without the WSL2 extra layer.
+**URLs:** Deployed apps get `http://<slug>-<id8>.<domain>` (e.g., `my-app-a1b2c3d4.localhost`) on port 80. Caddy proxies to `host.docker.internal:<hostPort>` (the published host port). Without `CADDY_DYNAMIC_DIR`, falls back to `BRIMBLE_APP_PUBLIC_BASE:<port>`.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PIPELINE_BUILD_TIMEOUT_MS` | `3600000` (60m) in Compose; `3600000` in code if unset | Max time (ms) for the **build** stage (clone, BuildKit, export/push) |
-| `PIPELINE_STAGE_TIMEOUT_MS` | `120000` | Max time (ms) for each of **deploy** and **serve** |
-| `BRIMBLE_WORKSPACE` | `/data/work` in Compose; `${TMP}/brimble-work` on Windows without env | Per-deployment clone/extract and Railpack `cwd` |
-| `RAILPACK_BIN` | `railpack` | Path to Railpack if not on `PATH` |
-| `BUILDKIT_HOST` | `tcp://buildkit:1234` in Compose | BuildKit gRPC (plain TCP) for Railpack; see BuildKit / Railpack above |
-| `BRIMBLE_REGISTRY_PUSH_HOST` | `registry:5000` in Compose | Registry host used by the build (push) |
-| `BRIMBLE_REGISTRY_PULL_HOST` | `127.0.0.1:5000` in Compose | Registry host used by the Docker daemon (pull) |
-| `GIT_TOKEN` | (unset) | Optional token for private HTTPS git clones |
-| `DOCKER_SOCKET_PATH` | `/var/run/docker.sock` (or Windows pipe) | API to Docker for deploy |
-| `BRIMBLE_HOST_PORT_MIN` / `MAX` | `10000` / `11000` | Host port allocation range |
-| `BRIMBLE_CONTAINER_PORT` | `3000` | In-container port the app listens on (map to a host port) |
-| `BRIMBLE_HEALTH_POLL_MS` | `15000` | How often to `inspect` **running** containers |
-| `BRIMBLE_APP_PUBLIC_BASE` | `http://localhost` | Fallback `url` when `CADDY_DYNAMIC_DIR` is unset (origin only; port appended) |
-| `CADDY_DYNAMIC_DIR` / `CADDYFILE_PATH` | see `.env.example` | Required for Caddy vhosts; same paths in backend + Caddy containers |
-| `BRIMBLE_APPS_BASE_DOMAIN` | `localhost` | Right-hand side of the app host (`<slug>-<id8>.<domain>`) |
-| `BRIMBLE_DOCKER_UPSTREAM_HOST` | `host.docker.internal` | Where Caddy should send traffic (host-mapped app port) |
+| `PIPELINE_BUILD_TIMEOUT_MS` | `3600000` (60m) | Build stage timeout (ms) — Railpack image pulls can be slow |
+| `PIPELINE_STAGE_TIMEOUT_MS` | `120000` (2m) | Deploy/serve stage timeout (ms) |
+| `BRIMBLE_WORKSPACE` | `/data/work` | Clone/extract directory and Railpack working dir |
+| `BUILDKIT_HOST` | `tcp://buildkit:1234` | BuildKit gRPC endpoint |
+| `BRIMBLE_REGISTRY_PUSH_HOST` | `registry:5000` | Registry for image push (internal Docker network) |
+| `BRIMBLE_REGISTRY_PULL_HOST` | `127.0.0.1:5001` | Registry for image pull (host loopback) |
+| `BRIMBLE_HOST_PORT_MIN/MAX` | `10000/11000` | Host port range for deployed app containers |
+| `BRIMBLE_HEALTH_POLL_MS` | `15000` | Container health check interval (ms) |
+| `CADDY_DYNAMIC_DIR` | `/etc/caddy/dynamic` | Where Caddy vhost snippets are written |
+| `BRIMBLE_APPS_BASE_DOMAIN` | `localhost` | Domain for deployed apps (`*.domain`) |
+| `CORS_ORIGIN` | `http://localhost` | Allowed API origins (comma-separated) |
+| `GIT_TOKEN` | — | GitHub PAT for private HTTPS repos |
 
 ## Cloud Deployment
 
-To deploy on a cloud server (EC2, DigitalOcean, Linode, etc.):
+To deploy on a cloud server:
 
 ```bash
 # 1. Configure backend environment
@@ -129,6 +110,41 @@ docker compose up -d --build
 ```
 
 Access the UI at `http://your-public-ip`. All other configuration variables use sensible defaults from `backend/.env.example`.
+
+## Design Decisions
+
+Why I built it this way:
+
+**Server-Sent Events (SSE) instead of WebSockets**
+- Logs are a one-way stream (server → client)
+- SSE auto-reconnects with `Last-Event-ID`, making resume seamless
+- No WebSocket handshake overhead; works through standard HTTP proxies
+- Browser's `EventSource` handles reconnects and buffering natively
+
+**BuildKit + Railpack for container builds**
+- Railpack auto-detects languages (Node, Python, Go, etc.) without Dockerfiles
+- BuildKit builds run in isolated, privileged containers—not the host
+- TCP connection (`tcp://buildkit:1234`) avoids socket permission issues inside containers
+
+**Local registry to avoid "sending tarball" hang**
+- BuildKit can export directly to Docker daemon, but on WSL2/Docker Desktop this stalls for 30+ minutes
+- I push to a local registry (`127.0.0.1:5001`) and pull by tag instead
+- Eliminates the tar-stream bottleneck completely
+
+**SQLite + Prisma 7 for persistence**
+- Single-node constraint means no need for distributed PostgreSQL
+- File-backed database simplifies backups and local development
+- Prisma 7's new client generator improves cold-start performance
+
+**Caddy dynamic vhosts for deployed apps**
+- No DNS configuration needed: `*.nip.io` resolves any IP (e.g., `app-123.13.50.5.50.nip.io`)
+- Caddy watches `caddy/dynamic/*.caddy` files and reloads automatically
+- No API calls needed from backend—just write files to shared volume
+
+**In-memory job queue (not Redis)**
+- Single-node deployment: one worker process is sufficient
+- `async` library queue provides backpressure and sequential processing
+- Zero additional infrastructure (no Redis container)
 
 ## Project layout
 
