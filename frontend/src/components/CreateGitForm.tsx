@@ -6,6 +6,7 @@ import { fetchRepoBranches } from "../api/reposApi.js";
 import { queryKeys } from "../api/queryKeys.js";
 import { parseHttpsGitSource } from "../lib/gitSourceNormalize.js";
 import { GitBranch, Loader2, ChevronDown } from "lucide-react";
+import { EnvVarInput } from "./EnvVarInput.js";
 
 function isValidSource(s: string): boolean {
   const t = s.trim();
@@ -28,6 +29,7 @@ export function CreateGitForm({ onSuccessNavigate }: Props) {
   const [name, setName] = useState("");
   const [source, setSource] = useState("");
   const [ref, setRef] = useState("main");
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
   const [localError, setLocalError] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
@@ -116,6 +118,7 @@ export function CreateGitForm({ onSuccessNavigate }: Props) {
         name: name.trim(),
         source: source.trim(),
         ref: ref.trim() || undefined,
+        envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
       });
     },
     onSuccess: (d) => {
@@ -290,6 +293,8 @@ export function CreateGitForm({ onSuccessNavigate }: Props) {
           </p>
         )}
       </div>
+
+      <EnvVarInput value={envVars} onChange={setEnvVars} />
 
       {localError && (
         <p className="rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

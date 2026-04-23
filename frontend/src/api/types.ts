@@ -18,6 +18,7 @@ export interface Deployment {
   containerId: string | null;
   url: string | null;
   port: number | null;
+  envVars: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -14,13 +14,14 @@ import {
   getDeploymentById,
   listDeployments,
   patchDeploymentFields,
+  resetDeploymentForRedeploy,
 } from "../services/deploymentService.js";
-import { appendLog, listLogsAfterId, listRecentLogs } from "../services/logService.js";
+import { appendLog, clearLogs, listLogsAfterId, listRecentLogs } from "../services/logService.js";
 import { subscribeToLogs, type LogEventPayload } from "../services/logBus.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { badRequestError, notFoundError } from "../middleware/errorHandler.js";
 import { normalizeGitSourceForCreate } from "../lib/gitSourceNormalize.js";
-import { createDeploymentBodySchema, listDeploymentsQuerySchema } from "../validation/deployments.js";
+import { createDeploymentBodySchema, listDeploymentsQuerySchema, redeployBodySchema } from "../validation/deployments.js";
 
 const LOG_REPLAY_MAX = 500;
 const HEARTBEAT_MS = 20_000;
@@ -58,6 +59,7 @@ router.post(
       sourceType: "git",
       source: n.source,
       sourceRef: n.ref,
+      envVars: body.envVars,
     });
     await appendLog(d.id, {
       stage: "build",
@@ -82,6 +84,15 @@ router.post(
   uploadMemory.single("file"),
   asyncHandler(async (req, res) => {
     const name = z.string().min(1).max(200).trim().parse((req.body as { name?: unknown }).name);
+    const envVarsJson = (req.body as { envVars?: unknown }).envVars;
+    let envVars: Record<string, string> | undefined;
+    if (typeof envVarsJson === "string" && envVarsJson.trim()) {
+      try {
+        envVars = JSON.parse(envVarsJson) as Record<string, string>;
+      } catch {
+        throw badRequestError("Invalid envVars JSON");
+      }
+    }
     const file = req.file;
     if (!file) {
       throw badRequestError('Multipart field "file" is required');
@@ -93,6 +104,7 @@ router.post(
       name,
       sourceType: "upload",
       source: "pending",
+      envVars,
     });
     const base = getDeploymentWorkspaceDir(d.id);
     const uploadPath = path.join(base, "upload" + uploadFileExtension(file.originalname));
@@ -210,6 +222,49 @@ router.delete(
       throw notFoundError("Deployment not found");
     }
     res.status(204).end();
+  })
+);
+
+/** Redeploy: destroy runtime, clear logs, reset to pending, requeue */
+router.post(
+  "/:id/redeploy",
+  asyncHandler(async (req, res) => {
+    const id = idParam.parse(req.params.id);
+    const body = redeployBodySchema.parse(req.body);
+    const ex = await getDeploymentById(id);
+    if (!ex) {
+      throw notFoundError("Deployment not found");
+    }
+
+    // Destroy existing runtime if any
+    await destroyDeploymentRuntime(id);
+
+    // Clear all logs for fresh start
+    await clearLogs(id);
+
+    // Reset deployment to pending state
+    const reset = await resetDeploymentForRedeploy(id);
+    if (!reset) {
+      throw notFoundError("Failed to reset deployment");
+    }
+
+    // Optionally update envVars if provided
+    if (body.envVars !== undefined) {
+      await patchDeploymentFields(id, {
+        envVars: body.envVars ? JSON.stringify(body.envVars) : null,
+      });
+    }
+
+    // Log and requeue
+    await appendLog(id, {
+      stage: "build",
+      level: "info",
+      message: "Redeployment started. Pipeline queued.",
+    });
+    enqueueDeployment(id);
+
+    const updated = await getDeploymentById(id);
+    res.status(200).json({ data: updated });
   })
 );
 

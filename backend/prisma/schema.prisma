@@ -47,6 +47,7 @@ model Deployment {
   containerId String?
   url         String?
   port        Int?
+  envVars     String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   logs        Log[]

@@ -214,7 +214,7 @@ export function LogViewer({ deploymentId, status, createdAt, updatedAt }: LogVie
         </div>
       </div>
       <div
-        className="max-h-[min(70vh,600px)] overflow-auto rounded-sm border border-slate-700 bg-slate-800 p-4 font-mono text-sm"
+        className="max-h-[min(70vh,600px)] overflow-auto rounded-sm border border-slate-600 bg-slate-700 p-4 font-mono text-sm"
         style={{ minHeight: "16rem" }}
         role="log"
         aria-live="polite"
@@ -225,7 +225,7 @@ export function LogViewer({ deploymentId, status, createdAt, updatedAt }: LogVie
         {display.map((line) => (
           <div
             key={line.id}
-            className="flex flex-wrap gap-x-3 break-words border-b border-slate-700/50 py-1.5 pr-2 last:border-0"
+            className="flex flex-wrap gap-x-3 wrap-break-word border-b border-slate-600/50 py-1.5 pr-2 last:border-0"
           >
             <span className="shrink-0 text-slate-500 tabular-nums">
               {timeFmt(line.timestamp)}

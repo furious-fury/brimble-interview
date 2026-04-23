@@ -19,10 +19,11 @@ export async function createGitDeployment(input: {
   name: string;
   source: string;
   ref?: string;
+  envVars?: Record<string, string>;
 }): Promise<Deployment> {
   const j = await apiPostJson<typeof input, { data: Deployment }>(
     "/deployments",
-    { name: input.name, source: input.source, ref: input.ref }
+    { name: input.name, source: input.source, ref: input.ref, envVars: input.envVars }
   );
   return unwrapData(j);
 }
@@ -30,10 +31,14 @@ export async function createGitDeployment(input: {
 export async function createUploadDeployment(input: {
   name: string;
   file: File;
+  envVars?: Record<string, string>;
 }): Promise<Deployment> {
   const form = new FormData();
   form.set("name", input.name);
   form.set("file", input.file);
+  if (input.envVars) {
+    form.set("envVars", JSON.stringify(input.envVars));
+  }
   const j = await apiPostFormData<{ data: Deployment }>(
     "/deployments/upload",
     form
@@ -43,4 +48,15 @@ export async function createUploadDeployment(input: {
 
 export async function deleteDeployment(id: string): Promise<void> {
   await apiDelete(`/deployments/${id}`);
+}
+
+export async function redeployDeployment(
+  id: string,
+  envVars?: Record<string, string>
+): Promise<Deployment> {
+  const j = await apiPostJson<{ envVars?: Record<string, string> }, { data: Deployment }>(
+    `/deployments/${id}/redeploy`,
+    { envVars }
+  );
+  return unwrapData(j);
 }

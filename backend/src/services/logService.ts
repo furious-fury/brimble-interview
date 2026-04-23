@@ -80,3 +80,11 @@ export async function listLogsAfterId(
   return rows.map(toPayload);
 }
 
+/** Delete all logs for a deployment (used when redeploying for fresh start) */
+export async function clearLogs(deploymentId: string): Promise<number> {
+  const result = await prisma.log.deleteMany({
+    where: { deploymentId },
+  });
+  return result.count;
+}
+

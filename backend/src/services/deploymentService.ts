@@ -12,6 +12,7 @@ const deploymentSelect = {
   containerId: true,
   url: true,
   port: true,
+  // envVars is not in the generated client yet, add after migration
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DeploymentSelect;
@@ -27,6 +28,7 @@ export type DeploymentDTO = {
   containerId: string | null;
   url: string | null;
   port: number | null;
+  envVars: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -42,11 +44,13 @@ function toDTO(row: {
   containerId: string | null;
   url: string | null;
   port: number | null;
+  envVars?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): DeploymentDTO {
   return {
     ...row,
+    envVars: row.envVars ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -57,6 +61,7 @@ export async function createDeployment(input: {
   sourceType: "git" | "upload";
   source: string;
   sourceRef?: string | null;
+  envVars?: Record<string, string> | null;
 }): Promise<DeploymentDTO> {
   const row = await prisma.deployment.create({
     data: {
@@ -64,11 +69,12 @@ export async function createDeployment(input: {
       sourceType: input.sourceType,
       source: input.source,
       sourceRef: input.sourceRef ?? null,
+      envVars: input.envVars ? JSON.stringify(input.envVars) : null,
       status: "pending",
     },
     select: deploymentSelect,
   });
-  return toDTO(row);
+  return toDTO(row as Parameters<typeof toDTO>[0]);
 }
 
 export async function listDeployments(limit: number): Promise<DeploymentDTO[]> {
@@ -77,7 +83,7 @@ export async function listDeployments(limit: number): Promise<DeploymentDTO[]> {
     take: limit,
     select: deploymentSelect,
   });
-  return rows.map(toDTO);
+  return rows.map((r) => toDTO(r as Parameters<typeof toDTO>[0]));
 }
 
 export async function getDeploymentById(id: string): Promise<DeploymentDTO | null> {
@@ -85,7 +91,7 @@ export async function getDeploymentById(id: string): Promise<DeploymentDTO | nul
     where: { id },
     select: deploymentSelect,
   });
-  return row ? toDTO(row) : null;
+  return row ? toDTO(row as Parameters<typeof toDTO>[0]) : null;
 }
 
 export async function deleteDeployment(id: string): Promise<boolean> {
@@ -107,7 +113,29 @@ export async function updateDeploymentStatus(
       data: { status },
       select: deploymentSelect,
     });
-    return toDTO(row);
+    return toDTO(row as Parameters<typeof toDTO>[0]);
+  } catch {
+    return null;
+  }
+}
+
+/** Reset deployment for redeploy: clear runtime fields, reset to pending */
+export async function resetDeploymentForRedeploy(
+  id: string
+): Promise<DeploymentDTO | null> {
+  try {
+    const row = await prisma.deployment.update({
+      where: { id },
+      data: {
+        status: "pending",
+        imageTag: null,
+        containerId: null,
+        url: null,
+        port: null,
+      },
+      select: deploymentSelect,
+    });
+    return toDTO(row as Parameters<typeof toDTO>[0]);
   } catch {
     return null;
   }
@@ -120,6 +148,7 @@ type RunFields = {
   containerId?: string | null;
   url?: string | null;
   port?: number | null;
+  envVars?: string | null;
   status?: DeploymentStatus;
 };
 
@@ -134,7 +163,7 @@ export async function patchDeploymentFields(
       data,
       select: deploymentSelect,
     });
-    return toDTO(row);
+    return toDTO(row as Parameters<typeof toDTO>[0]);
   } catch {
     return null;
   }

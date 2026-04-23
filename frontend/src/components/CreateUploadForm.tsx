@@ -4,6 +4,7 @@ import { ApiError } from "../api/client.js";
 import { createUploadDeployment } from "../api/deploymentsApi.js";
 import { queryKeys } from "../api/queryKeys.js";
 import { FileArchive } from "lucide-react";
+import { EnvVarInput } from "./EnvVarInput.js";
 
 type Props = { onSuccessNavigate?: (id: string) => void };
 
@@ -11,6 +12,7 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
   const [localError, setLocalError] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
   const inputId = useId();
@@ -18,7 +20,11 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
   const m = useMutation({
     mutationFn: () => {
       if (!file) throw new Error("Choose a .zip or .tar.gz / .tgz file.");
-      return createUploadDeployment({ name: name.trim(), file });
+      return createUploadDeployment({
+        name: name.trim(),
+        file,
+        envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+      });
     },
     onSuccess: (d) => {
       void qc.invalidateQueries({ queryKey: queryKeys.deployments() });
@@ -115,6 +121,9 @@ export function CreateUploadForm({ onSuccessNavigate }: Props) {
           />
         </label>
       </div>
+
+      <EnvVarInput value={envVars} onChange={setEnvVars} />
+
       {localError && (
         <p className="rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {localError}

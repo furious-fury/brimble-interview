@@ -26,6 +26,16 @@ async function ensureImageAvailable(image: string): Promise<void> {
   });
 }
 
+function parseEnvVars(envVarsJson: string | null | undefined): string[] {
+  if (!envVarsJson) return [];
+  try {
+    const parsed = JSON.parse(envVarsJson) as Record<string, string>;
+    return Object.entries(parsed).map(([key, value]) => `${key}=${value}`);
+  } catch {
+    return [];
+  }
+}
+
 export async function runDeployStage(ctx: StageContext, build: BuildResult): Promise<DeployResult> {
   const docker = getDocker();
   const deploymentId = ctx.deployment.id;
@@ -35,6 +45,9 @@ export async function runDeployStage(ctx: StageContext, build: BuildResult): Pro
   let releaseOnError = true;
   let created: Container | undefined;
 
+  // Parse environment variables from deployment
+  const envVars = parseEnvVars(ctx.deployment.envVars);
+
   try {
     await ensureImageAvailable(image);
     created = await docker.createContainer({
@@ -43,6 +56,7 @@ export async function runDeployStage(ctx: StageContext, build: BuildResult): Pro
         [LABEL_MANAGED]: "true",
         [LABEL_DEPLOYMENT_ID]: deploymentId,
       },
+      Env: envVars,
       ExposedPorts: { [`${cPort}/tcp`]: {} },
       HostConfig: {
         PortBindings: {
