@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ApiError } from "../api/client.js";
 import { createGitDeployment } from "../api/deploymentsApi.js";
 import { queryKeys } from "../api/queryKeys.js";
+import { parseHttpsGitSource } from "../lib/gitSourceNormalize.js";
 import { GitBranch } from "lucide-react";
 
 function isValidSource(s: string): boolean {
@@ -20,15 +21,27 @@ export function CreateGitForm({ onSuccessNavigate }: Props) {
   const [ref, setRef] = useState("main");
   const [localError, setLocalError] = useState<string | null>(null);
 
+  const applySourceFromUrl = (raw: string) => {
+    const t = raw.trim();
+    if (!/^https?:\/\//i.test(t)) {
+      return;
+    }
+    const { baseUrl, inferredRef } = parseHttpsGitSource(t);
+    if (baseUrl) {
+      setSource(baseUrl);
+    }
+    if (inferredRef) {
+      setRef(inferredRef);
+    }
+  };
+
   const m = useMutation({
     mutationFn: () => {
-      const p: { name: string; source: string; ref?: string } = {
+      return createGitDeployment({
         name: name.trim(),
         source: source.trim(),
-      };
-      const r = ref.trim();
-      if (r && r !== "main") p.ref = r;
-      return createGitDeployment(p);
+        ref: ref.trim() || undefined,
+      });
     },
     onSuccess: (d) => {
       void qc.invalidateQueries({ queryKey: queryKeys.deployments() });
@@ -63,7 +76,9 @@ export function CreateGitForm({ onSuccessNavigate }: Props) {
       noValidate
     >
       <p className="text-sm text-slate-500">
-        Clone a public or token-accessible repository; default branch is{" "}
+        Paste a Git URL or a GitHub/GitLab <strong className="font-medium">tree</strong> link — we
+        normalize the URL and set <strong className="font-medium">ref</strong> from the path when
+        present. Default branch is{" "}
         <code className="rounded bg-slate-100 px-1">main</code>.
       </p>
       <div>
@@ -94,7 +109,8 @@ export function CreateGitForm({ onSuccessNavigate }: Props) {
           className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-mono text-sm text-slate-900 shadow-sm outline-none ring-indigo-500/20 transition focus:ring-2"
           value={source}
           onChange={(e) => setSource(e.target.value)}
-          placeholder="https://github.com/org/repo.git"
+          onBlur={(e) => applySourceFromUrl(e.target.value)}
+          placeholder="https://github.com/org/repo (or a …/tree/branch link)"
           required
         />
       </div>

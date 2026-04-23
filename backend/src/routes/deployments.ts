@@ -19,6 +19,7 @@ import { appendLog, listLogsAfterId, listRecentLogs } from "../services/logServi
 import { subscribeToLogs, type LogEventPayload } from "../services/logBus.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { badRequestError, notFoundError } from "../middleware/errorHandler.js";
+import { normalizeGitSourceForCreate } from "../lib/gitSourceNormalize.js";
 import { createDeploymentBodySchema, listDeploymentsQuerySchema } from "../validation/deployments.js";
 
 const LOG_REPLAY_MAX = 500;
@@ -51,11 +52,12 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const body = createDeploymentBodySchema.parse(req.body);
+    const n = normalizeGitSourceForCreate({ source: body.source, ref: body.ref });
     const d = await createDeployment({
       name: body.name,
       sourceType: "git",
-      source: body.source,
-      sourceRef: body.ref ?? "main",
+      source: n.source,
+      sourceRef: n.ref,
     });
     await appendLog(d.id, {
       stage: "build",

@@ -4,6 +4,7 @@ import os from "node:os";
 import fs from "node:fs/promises";
 import readline from "node:readline";
 import { appendLog } from "../../services/logService.js";
+import { patchRailpackPlanRelaxedLockfile } from "./patchRailpackLockfile.js";
 
 function railpackBinary(): string {
   return (process.env.RAILPACK_BIN ?? "railpack").trim() || "railpack";
@@ -147,6 +148,8 @@ export async function runRailpackBuild(opts: {
       args: ["prepare", ".", "--plan-out", planPath],
       signal,
     });
+
+    await patchRailpackPlanRelaxedLockfile(planPath, deploymentId);
 
     const inferredPort = await inferContainerPortFromPlan(planPath);
     containerPort = inferredPort ?? containerPort;

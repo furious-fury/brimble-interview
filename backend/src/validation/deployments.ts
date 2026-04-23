@@ -6,7 +6,11 @@ export const createDeploymentBodySchema = z
     name: z.string().min(1).max(200).trim(),
     source: z.string().min(1).max(2000).trim(),
     /** Branch, tag, or commit; defaults to main in createDeployment if omitted */
-    ref: z.string().min(1).max(500).trim().optional(),
+    ref: z
+      .string()
+      .max(500)
+      .optional()
+      .transform((s) => (s == null || s.trim() === "" ? undefined : s.trim())),
   })
   .superRefine((val, ctx) => {
     const ok = /^https?:\/\//i.test(val.source) || val.source.startsWith("git@");

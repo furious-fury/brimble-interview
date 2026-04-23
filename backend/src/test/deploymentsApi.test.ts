@@ -51,10 +51,26 @@ describe("HTTP API (deployments + health)", () => {
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({
       name: "test-app",
-      source: "https://github.com/o/r.git",
+      source: "https://github.com/o/r",
     });
+    expect(res.body.data.sourceRef).toBe("main");
     expect(res.body.data.id).toBeTruthy();
     expect(enqueueMock).toHaveBeenCalledWith(res.body.data.id);
+  });
+
+  it("POST /api/deployments normalizes GitHub tree URL and ref", async () => {
+    const res = await request(app)
+      .post("/api/deployments")
+      .send({
+        name: "tree",
+        source: "https://github.com/o/r/tree/develop",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({
+      name: "tree",
+      source: "https://github.com/o/r",
+      sourceRef: "develop",
+    });
   });
 
   it("GET /api/deployments/:id returns 404 for unknown", async () => {
