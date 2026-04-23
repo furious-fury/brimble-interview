@@ -3,57 +3,29 @@
 	admin 0.0.0.0:2019
 	# Local dev: keep HTTP; don't redirect to HTTPS
 	auto_https off
-	
-	# Set PUBLIC_IP environment variable for external access (e.g., 13.50.5.50)
-	# Or add your IP directly to the @brimble host matcher below
 }
 
 # Per-deployment host blocks (see POST /api/caddy/routes)
 import /etc/caddy/dynamic/*.caddy
 
-# Main entry point - handles localhost, 127.0.0.1, and EC2 public IP
+# Main entry point - handle ALL hosts (localhost, 127.0.0.1, and any IP/domain)
 :80 {
-	@brimble host localhost 127.0.0.1 ::1 {$PUBLIC_IP:}
-	handle @brimble {
-		# API
-		@api {
-			path /api/*
-		}
-		handle @api {
-			reverse_proxy http://backend:3000 {
-				header_up Host {host}
-				header_up X-Forwarded-For {remote}
-				header_up X-Forwarded-Proto {scheme}
-			}
-		}
-
-		# Dev UI (Vite)
-		handle {
-			reverse_proxy http://frontend:5173 {
-				header_up Host {host}
-			}
+	# API
+	@api {
+		path /api/*
+	}
+	handle @api {
+		reverse_proxy http://backend:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote}
+			header_up X-Forwarded-Proto {scheme}
 		}
 	}
 
-	# Fallback for any other host (useful for EC2 IP access)
+	# Dev UI (Vite) - catch all other requests
 	handle {
-		# API
-		@api {
-			path /api/*
-		}
-		handle @api {
-			reverse_proxy http://backend:3000 {
-				header_up Host {host}
-				header_up X-Forwarded-For {remote}
-				header_up X-Forwarded-Proto {scheme}
-			}
-		}
-
-		# Dev UI (Vite)
-		handle {
-			reverse_proxy http://frontend:5173 {
-				header_up Host {host}
-			}
+		reverse_proxy http://frontend:5173 {
+			header_up Host {host}
 		}
 	}
 }

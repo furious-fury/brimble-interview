@@ -39,8 +39,6 @@ services:
     depends_on:
       - backend
       - frontend
-    environment:
-      - PUBLIC_IP=${PUBLIC_IP:-}
     # Must match backend: deployment routes use host.docker.internal:<published port>
     # to reach the host-mapped app container; without this, name resolves to an
     # unreachable address on Linux (blank page through :80, direct :port still works).

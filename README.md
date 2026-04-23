@@ -109,11 +109,33 @@ After create, the server enqueues a run: **build** (Railpack + BuildKit) → **d
 | `BRIMBLE_APPS_BASE_DOMAIN` | `localhost` | Right-hand side of the app host (`<slug>-<id8>.<domain>`) |
 | `BRIMBLE_DOCKER_UPSTREAM_HOST` | `host.docker.internal` | Where Caddy should send traffic (host-mapped app port) |
 
+## Cloud Deployment
+
+To deploy on a cloud server (EC2, DigitalOcean, Linode, etc.):
+
+```bash
+# 1. Configure backend environment
+cd backend
+cp .env.example .env
+
+# 2. Edit .env and set your public IP (replace 13.50.5.50 with your actual IP):
+#   CORS_ORIGIN=http://13.50.5.50,http://localhost
+#   BRIMBLE_APPS_BASE_DOMAIN=13.50.5.50.nip.io
+#   BRIMBLE_APP_PUBLIC_BASE=http://13.50.5.50
+
+# 3. Start services
+cd ..
+docker compose up -d --build
+```
+
+Access the UI at `http://your-public-ip`. All other configuration variables use sensible defaults from `backend/.env.example`.
+
 ## Project layout
 
-- `backend/` — TypeScript API and pipeline (future)
-- `frontend/` — Vite + React app
-- `caddy/` — Caddyfile and per-deployment `dynamic/*.caddy` snippets (written by the backend in Phase 7)
+- `backend/` — Node.js/Express API, pipeline orchestration, Prisma database layer
+- `frontend/` — Vite + React + TanStack (Query, Router) single-page UI
+- `caddy/` — Reverse proxy configuration and per-deployment route snippets (`dynamic/*.caddy`)
+- `buildkit/` — BuildKit daemon configuration (`.toml` for build settings) 
 
 ## License
 
