@@ -13,9 +13,11 @@ export async function runRailpackBuild(opts: {
   deploymentId: string;
   cwd: string;
   imageTag: string;
+  /** When aborted (e.g. build timeout), the railpack process is sent SIGTERM. */
+  signal?: AbortSignal;
 }): Promise<{ imageTag: string }> {
   const bin = railpackBinary();
-  const { deploymentId, cwd, imageTag } = opts;
+  const { deploymentId, cwd, imageTag, signal: cancelSignal } = opts;
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(
@@ -27,6 +29,16 @@ export async function runRailpackBuild(opts: {
         stdio: ["ignore", "pipe", "pipe"],
       }
     );
+
+    const onAbort = () => {
+      if (child.exitCode == null) {
+        child.kill("SIGTERM");
+      }
+    };
+    if (cancelSignal) {
+      if (cancelSignal.aborted) onAbort();
+      else cancelSignal.addEventListener("abort", onAbort, { once: true });
+    }
 
     const onLine = (level: "info" | "error", line: string) => {
       if (!line.trim()) return;
@@ -44,10 +56,18 @@ export async function runRailpackBuild(opts: {
       readline.createInterface({ input: child.stderr }).on("line", (line) => onLine("error", line));
     }
 
-    child.on("error", (e) => reject(e));
+    child.on("error", (e) => {
+      if (cancelSignal) cancelSignal.removeEventListener("abort", onAbort);
+      reject(e);
+    });
     child.on("close", (code) => {
+      if (cancelSignal) cancelSignal.removeEventListener("abort", onAbort);
       if (code === 0) resolve();
-      else reject(new Error(`railpack exited with code ${code}`));
+      else if (code === null && (cancelSignal?.aborted ?? false)) {
+        reject(new Error("railpack was stopped (build cancelled or timeout)"));
+      } else {
+        reject(new Error(`railpack exited with code ${code}`));
+      }
     });
   });
 

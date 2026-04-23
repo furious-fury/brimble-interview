@@ -57,7 +57,12 @@ export async function runBuildStage(ctx: StageContext): Promise<BuildResult> {
       message: `Running railpack in ${cwd} (image: ${imageTag})`,
     });
 
-    return await runRailpackBuild({ deploymentId: id, cwd, imageTag });
+    return await runRailpackBuild({
+      deploymentId: id,
+      cwd,
+      imageTag,
+      signal: ctx.abortSignal,
+    });
   } finally {
     try {
       await cleanupDeploymentWorkspace(id);

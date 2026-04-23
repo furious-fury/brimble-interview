@@ -10,13 +10,23 @@ import { runDeployStage } from "./stages/deployStage.js";
 import { runServeStage } from "./stages/serveStage.js";
 import { pipelineEvents } from "./events.js";
 
+// Default 60m: WSL2 + Docker Desktop can spend 30+ minutes on BuildKit "sending tarball" alone.
+const BUILD_TIMEOUT_MS = Number(process.env.PIPELINE_BUILD_TIMEOUT_MS) || 3_600_000;
 const STAGE_TIMEOUT_MS = Number(process.env.PIPELINE_STAGE_TIMEOUT_MS) || 120_000;
 
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(
+  p: Promise<T>,
+  ms: number,
+  label: string,
+  onTimeout?: () => void
+): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms);
+      setTimeout(() => {
+        onTimeout?.();
+        reject(new Error(`Timeout after ${ms}ms: ${label}`));
+      }, ms);
     }),
   ]);
 }
@@ -71,10 +81,12 @@ export async function runPipeline(deploymentId: string): Promise<void> {
       message: `Status: ${afterPending.status}`,
     });
 
+    const buildController = new AbortController();
     const build = await withTimeout(
-      runBuildStage({ deployment: afterPending }),
-      STAGE_TIMEOUT_MS,
-      "build"
+      runBuildStage({ deployment: afterPending, abortSignal: buildController.signal }),
+      BUILD_TIMEOUT_MS,
+      "build",
+      () => buildController.abort()
     );
     await patchDeploymentFields(deploymentId, { imageTag: build.imageTag });
     await appendLog(deploymentId, {

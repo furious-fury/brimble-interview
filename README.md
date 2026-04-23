@@ -7,9 +7,9 @@ A minimal, end-to-end deployment pipeline: submit a project (Git URL or upload),
 - **Frontend:** Vite, React, TanStack (Query, Router)
 - **Backend:** Node.js, TypeScript, Express
 - **Data:** SQLite (file-backed, mounted in Compose) via **Prisma 7** with `prisma.config.ts` and `@prisma/adapter-better-sqlite3`
-- **Build:** Railpack
+- **Build:** Railpack (BuildKit)
 - **Runtime / ingress:** Docker + Caddy
-- **Pipeline (Phase 3+):** In-process queue, validated status transitions; **Phase 4** **Railpack**; **Phase 6** **dockerode** (host ports, runtime logs, health, teardown); **Phase 7** adds a Caddy vhost and writes `caddy/dynamic/<id>.caddy` so the stored **`url` is `http://<name>-<id>.<domain>`** on port **80** (e.g. `http://my-app-a1b2c3d4.localhost` when `CADDY_DYNAMIC_DIR` is set). If `CADDY_DYNAMIC_DIR` is missing, the pipeline falls back to `BRIMBLE_APP_PUBLIC_BASE:<port>`. Env `PIPELINE_STAGE_TIMEOUT_MS` and optional `pipelineEvents` for tests.
+- **Pipeline (Phase 3+):** In-process queue, validated status transitions; **Phase 4** **Railpack**; **Phase 6** **dockerode** (host ports, runtime logs, health, teardown); **Phase 7** adds a Caddy vhost and writes `caddy/dynamic/<id>.caddy` so the stored **`url` is `http://<name>-<id>.<domain>`** on port **80** (e.g. `http://my-app-a1b2c3d4.localhost` when `CADDY_DYNAMIC_DIR` is set). If `CADDY_DYNAMIC_DIR` is missing, the pipeline falls back to `BRIMBLE_APP_PUBLIC_BASE:<port>`. Env `PIPELINE_BUILD_TIMEOUT_MS`, `PIPELINE_STAGE_TIMEOUT_MS`, and optional `pipelineEvents` for tests.
 
 ## Prerequisites
 
@@ -33,6 +33,10 @@ docker compose up --build
 - App UI and API: **http://localhost** (Caddy on port 80; proxies `/api` to the API and other paths to the Vite dev server in development)
 - Caddy admin API: **http://localhost:2019** (used by the backend in later phases for route updates; do not expose publicly)
 - The API exposes `GET /api/health` for a quick health check
+
+### BuildKit / Railpack (Docker)
+
+Compose includes a **`buildkit`** service (`moby/buildkit`, **privileged**) with `container_name: buildkit`, listening on **TCP 1234** for other containers. The backend sets **`BUILDKIT_HOST=tcp://buildkit:1234`** so Railpack can reach BuildKit (plain `docker-container://` from inside the backend often fails with “failed to get buildkit information”). If you change the backend base image (e.g. Alpine to Debian), you may still need to **recreate the `backend_node_modules` volume** so native modules match the new libc.
 
 ## Local development (without Docker)
 
@@ -73,11 +77,17 @@ After create, the server enqueues a run: **build** (Railpack + BuildKit) → **d
 
 **Caddy** reaches the app via **`http://host.docker.internal:<hostPort>`** (default), because the app’s port is published on the **Docker host**, not on the Caddy network. Override with `BRIMBLE_DOCKER_UPSTREAM_HOST` if your setup differs. Without `CADDY_DYNAMIC_DIR`, **`url` falls back to** `BRIMBLE_APP_PUBLIC_BASE:<port>` (direct access, no vhost).
 
+**Build timeouts:** A short per-stage cap breaks **first Railpack runs** (image pulls) and especially **`sending tarball`** (BuildKit → Docker), which on **WSL2 + Docker Desktop** can take **30+ minutes** with little log output. **`PIPELINE_BUILD_TIMEOUT_MS`** defaults to **60 minutes** in Compose and in code. Set it higher (e.g. `7200000` for 2h) if builds still time out. **`PIPELINE_STAGE_TIMEOUT_MS`** still applies to **deploy** and **serve** (2 minutes each). On build timeout, the server **sends SIGTERM to the `railpack` process**.
+
+**Testing with Docker Desktop:** Ensure **Resources** (CPU/RAM/disk) are adequate and the disk is not full (`docker system df`). During a stuck `sending tarball`, run `docker stats` and confirm the **buildkit** container shows **block I/O** moving. To compare without Brimble, you can `docker compose exec backend sh` and in `/data/work/<id>/source` run `railpack build --name test:local .` (same slowness confirms I/O, not the app). For a fair speed test, use **Linux bare metal** or **Docker on Linux** without the WSL2 extra layer.
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PIPELINE_STAGE_TIMEOUT_MS` | `120000` | Max time (ms) for each of build, deploy, and serve steps |
+| `PIPELINE_BUILD_TIMEOUT_MS` | `3600000` (60m) in Compose; `3600000` in code if unset | Max time (ms) for the **build** stage (clone, BuildKit, image load to Docker) |
+| `PIPELINE_STAGE_TIMEOUT_MS` | `120000` | Max time (ms) for each of **deploy** and **serve** |
 | `BRIMBLE_WORKSPACE` | `/data/work` in Compose; `${TMP}/brimble-work` on Windows without env | Per-deployment clone/extract and Railpack `cwd` |
 | `RAILPACK_BIN` | `railpack` | Path to Railpack if not on `PATH` |
+| `BUILDKIT_HOST` | `tcp://buildkit:1234` in Compose | BuildKit gRPC (plain TCP) for Railpack; see BuildKit / Railpack above |
 | `GIT_TOKEN` | (unset) | Optional token for private HTTPS git clones |
 | `DOCKER_SOCKET_PATH` | `/var/run/docker.sock` (or Windows pipe) | API to Docker for deploy |
 | `BRIMBLE_HOST_PORT_MIN` / `MAX` | `10000` / `11000` | Host port allocation range |

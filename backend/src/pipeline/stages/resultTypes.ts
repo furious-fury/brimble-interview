@@ -15,4 +15,6 @@ export type RunResult = {
 
 export type StageContext = {
   deployment: DeploymentDTO;
+  /** If set, Railpack is killed when this is aborted (e.g. build stage timeout). */
+  abortSignal?: AbortSignal;
 };
