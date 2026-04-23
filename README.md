@@ -36,7 +36,7 @@ docker compose up --build
 
 ### BuildKit / Railpack (Docker)
 
-Compose includes a **`buildkit`** service (`moby/buildkit`, **privileged**) with `container_name: buildkit`, listening on **TCP 1234** for other containers. The backend sets **`BUILDKIT_HOST=tcp://buildkit:1234`** so Railpack can reach BuildKit (plain `docker-container://` from inside the backend often fails with “failed to get buildkit information”). If you change the backend base image (e.g. Alpine to Debian), you may still need to **recreate the `backend_node_modules` volume** so native modules match the new libc.
+Compose includes a **`buildkit`** service (`moby/buildkit`, **privileged**) with `container_name: buildkit`, listening on **TCP 1234** (for sibling containers like the backend) and the default **unix socket** (for `buildctl` defaults inside the BuildKit container). The backend sets **`BUILDKIT_HOST=tcp://buildkit:1234`** so Railpack can reach BuildKit (plain `docker-container://` from inside the backend often fails with “failed to get buildkit information”). If you change the backend base image (e.g. Alpine to Debian), you may still need to **recreate the `backend_node_modules` volume** so native modules match the new libc.
 
 ## Local development (without Docker)
 

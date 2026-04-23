@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { LogEntry, LogLevelName, LogStageName } from "../api/types.js";
+import type {
+  DeploymentStatus,
+  LogEntry,
+  LogLevelName,
+  LogStageName,
+} from "../api/types.js";
 
 const STAGE_FILTERS: Array<"all" | LogStageName> = [
   "all",
@@ -24,7 +29,23 @@ function levelClass(level: LogLevelName): string {
 
 type Props = { deploymentId: string };
 
-export function LogViewer({ deploymentId }: Props) {
+function fmtDuration(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const s = totalSec % 60;
+  const m = Math.floor(totalSec / 60) % 60;
+  const h = Math.floor(totalSec / 3600);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${m}:${pad(s)}`;
+}
+
+type LogViewerProps = Props & {
+  status: DeploymentStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function LogViewer({ deploymentId, status, createdAt, updatedAt }: LogViewerProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filter, setFilter] = useState<"all" | LogStageName>("all");
   const [conn, setConn] = useState<
@@ -32,6 +53,7 @@ export function LogViewer({ deploymentId }: Props) {
   >("connecting");
   const lastIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     setLogs([]);
@@ -94,10 +116,46 @@ export function LogViewer({ deploymentId }: Props) {
     };
   }, [deploymentId]);
 
+  useEffect(() => {
+    if (status !== "building") return;
+    const t = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, [status]);
+
   const display = useMemo(() => {
     if (filter === "all") return logs;
     return logs.filter((l) => l.stage === filter);
   }, [logs, filter]);
+
+  const buildStartMs = useMemo(() => {
+    // Prefer the first build-stage log line timestamp.
+    const firstBuild = logs.find((l) => l.stage === "build");
+    if (firstBuild) {
+      const t = Date.parse(firstBuild.timestamp);
+      if (Number.isFinite(t)) return t;
+    }
+    // Fallback: if currently building, use the last known deployment update.
+    if (status === "building") {
+      const t = Date.parse(updatedAt);
+      if (Number.isFinite(t)) return t;
+    }
+    const t = Date.parse(createdAt);
+    return Number.isFinite(t) ? t : null;
+  }, [createdAt, logs, status, updatedAt]);
+
+  const buildEndMs = useMemo(() => {
+    const done = logs.find((l) => l.stage === "build" && l.message.startsWith("Build stage complete."));
+    if (!done) return null;
+    const t = Date.parse(done.timestamp);
+    return Number.isFinite(t) ? t : null;
+  }, [logs]);
+
+  const buildElapsed = useMemo(() => {
+    if (!buildStartMs) return null;
+    const end = status === "building" ? now : buildEndMs;
+    if (!end) return null;
+    return fmtDuration(end - buildStartMs);
+  }, [buildEndMs, buildStartMs, now, status]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -123,6 +181,12 @@ export function LogViewer({ deploymentId }: Props) {
         <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
           Logs
         </p>
+        {buildElapsed && (
+          <div className="text-xs text-slate-500 tabular-nums">
+            {status === "building" ? "Build elapsed: " : "Build time: "}
+            <span className="text-slate-300">{buildElapsed}</span>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-1.5">
           {STAGE_FILTERS.map((f) => (
             <button

@@ -153,7 +153,12 @@ export function DeploymentDetailPage() {
         </div>
       </div>
 
-      <LogViewer deploymentId={deploymentId} />
+      <LogViewer
+        deploymentId={deploymentId}
+        status={d.status}
+        createdAt={d.createdAt}
+        updatedAt={d.updatedAt}
+      />
 
       {confirmOpen && (
         <div

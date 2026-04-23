@@ -6,7 +6,14 @@ services:
     container_name: buildkit
     privileged: true
     restart: unless-stopped
-    command: ["--addr", "tcp://0.0.0.0:1234"]
+    # Listen on both a unix socket (for in-container buildctl defaults) and TCP (for sibling containers).
+    command:
+      [
+        "--addr",
+        "unix:///run/buildkit/buildkitd.sock",
+        "--addr",
+        "tcp://0.0.0.0:1234",
+      ]
 
   caddy:
     image: caddy:2.8-alpine
