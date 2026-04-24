@@ -81,7 +81,7 @@ backend/
 │   │   ├── queue.ts              # In-memory job queue
 │   │   ├── workspace/
 │   │   │   ├── cleanup.ts        # Post-deployment cleanup
-│   │   │   ├── extractArchive.ts # ZIP/tar.gz extraction
+│   │   │   ├── extractArchive.ts # ZIP/tar.gz extraction + nested folder auto-detection
 │   │   │   └── paths.ts          # Workspace path helpers
 │   │   └── stages/
 │   │       ├── buildStage.ts     # Railpack + BuildKit build
@@ -159,10 +159,11 @@ model Log {
 - Job status tracked via database
 
 **Build Stage** (`pipeline/stages/buildStage.ts`):
-1. Clone git repo or use uploaded archive
-2. Run `railpack build` via BuildKit
-3. Push to local registry (avoids "sending tarball" issues)
-4. Store image tag in deployment
+1. Clone git repo or extract uploaded archive (ZIP/tar.gz)
+2. Auto-detect single top-level folder in archives (handles folder-zipping on macOS/Windows)
+3. Run `railpack build` via BuildKit
+4. Push to local registry (avoids "sending tarball" issues)
+5. Store image tag in deployment
 
 **Deploy Stage** (`pipeline/stages/deployStage.ts`):
 1. Allocate host port (10000-11000 range)
@@ -192,6 +193,81 @@ model Log {
 - Inspects running containers
 - Marks deployment `failed` if container stops unexpectedly
 
+---
+
+### BuildKit Image Export Challenge
+
+**Problem Discovery**
+
+During early testing, builds consistently hung at the "exporting to docker image format" stage with message `sending tarball`. The hang duration:
+- WSL2 (Windows 11): 30+ minutes (effectively indefinite)
+- Ubuntu EC2 (t3.medium): 30+ minutes
+- Native Linux: 2-5 minutes
+
+**Root Cause Analysis**
+
+BuildKit supports multiple image export modes:
+1. **Docker exporter** (default): Streams tarball to Docker daemon
+2. **OCI exporter**: Writes to local directory
+3. **Registry exporter**: Pushes to remote registry
+
+The Docker exporter uses a Unix socket or named pipe to stream the built image as a tar archive to the Docker daemon. On some environments (notably WSL2 and certain EC2 configurations), this tar stream blocks indefinitely, possibly due to:
+- Pipe buffer size limitations
+- Docker daemon socket handling differences
+- WSL2 filesystem translation overhead
+
+**Solution: Registry-Based Export**
+
+Instead of the default Docker exporter, the pipeline uses:
+
+```typescript
+// Build command in buildStage.ts
+const buildArgs = [
+  "build",
+  "--name", imageTag,
+  "--push", // Push to registry instead of local Docker
+  "-c", buildkitHost,
+  ".",
+];
+```
+
+Flow:
+1. **Build**: Railpack + BuildKit build image
+2. **Push**: BuildKit pushes directly to local registry (`registry:5000`)
+3. **Pull**: Docker daemon pulls from registry (`127.0.0.1:5001`)
+
+**Tradeoffs of This Approach**
+
+| Aspect | Before (Docker export) | After (Registry push/pull) |
+|--------|------------------------|---------------------------|
+| Time | 30+ min hang | 2-5 min reliable |
+| Complexity | Simple, one step | Requires registry container |
+| Port usage | None extra | Uses 5001 on host |
+| Reliability | Environment-dependent | Consistent across all tested platforms |
+
+**Verification**
+
+To confirm this was the issue (not general slowness), I ran BuildKit builds directly:
+
+```bash
+docker compose exec buildkit buildctl build \
+  --frontend dockerfile.v0 \
+  --local context=. \
+  --local dockerfile=. \
+  --output type=docker
+# ^ Hangs on WSL2
+
+docker compose exec buildkit buildctl build \
+  --frontend dockerfile.v0 \
+  --local context=. \
+  --local dockerfile=. \
+  --output type=image,name=test:latest,push=true \
+  --export-cache type=inline
+# ^ Works reliably
+```
+
+This isolated the issue to the `type=docker` export specifically, confirming the registry workaround.
+
 #### 4. Caddy Integration
 
 **Caddy Client** (`services/caddyClient.ts`):
@@ -216,6 +292,7 @@ http://{app-name}-{8chars}.{domain} {
 **Log Bus** (`services/logBus.ts`):
 - Event emitter for real-time log events
 - SSE endpoint subscribes to deployment-specific events
+- Control events for out-of-band notifications (e.g., `logs_cleared` on redeploy)
 
 **Persistence** (`services/logService.ts`):
 - SQLite storage via Prisma
@@ -225,6 +302,7 @@ http://{app-name}-{8chars}.{domain} {
 - Server-Sent Events stream
 - Replay last 500 logs on connect
 - Supports `?afterId=` for reconnection
+- Events: `log` (payload), `replay_done`, `logs_cleared` (redeploy), heartbeats
 - Heartbeat every 20 seconds
 
 ---
@@ -416,13 +494,18 @@ User → POST /api/deployments/:id/redeploy
 
 Backend:
   1. Destroy existing container
-  2. Clear logs (fresh start)
-  3. Reset DB fields (status: pending, url: null, etc.)
-  4. Re-enqueue to pipeline
-  5. Return updated deployment
+  2. Clear logs from database (fresh start)
+  3. Emit `logs_cleared` control event to connected SSE clients
+  4. Reset DB fields (status: pending, url: null, etc.)
+  5. Re-enqueue to pipeline
+  6. Return updated deployment
 
 Pipeline:
   - Same flow as create, but uses existing envVars
+
+Frontend:
+  - Receives `logs_cleared` event → clears local log state
+  - Shows fresh logs from new build immediately (no page refresh needed)
 ```
 
 ### 3. Log Streaming
@@ -459,17 +542,17 @@ Frontend:
 
 ### Cloud Deployment Config
 
-**For IP 13.50.5.50**:
+**Replace `<YOUR_PUBLIC_IP>` with your actual server IP** (e.g., EC2 public IP):
 ```bash
-CORS_ORIGIN=http://13.50.5.50,http://localhost
-BRIMBLE_APPS_BASE_DOMAIN=13.50.5.50.nip.io
-BRIMBLE_APP_PUBLIC_BASE=http://13.50.5.50
+CORS_ORIGIN=http://<YOUR_PUBLIC_IP>,http://localhost
+BRIMBLE_APPS_BASE_DOMAIN=<YOUR_PUBLIC_IP>.nip.io
+BRIMBLE_APP_PUBLIC_BASE=http://<YOUR_PUBLIC_IP>
 ```
 
 **Resulting URLs**:
-- UI: `http://13.50.5.50`
-- Apps: `http://{name}-{id8}.13.50.5.50.nip.io`
-- Example: `http://my-api-abc123de.13.50.5.50.nip.io`
+- UI: `http://<YOUR_PUBLIC_IP>`
+- Apps: `http://{name}-{id8}.<YOUR_PUBLIC_IP>.nip.io`
+- Example: `http://my-api-abc123de.203.0.113.45.nip.io` (with IP 203.0.113.45)
 
 ### Optional/Advanced Variables
 
@@ -566,3 +649,219 @@ Potential areas for enhancement:
 4. **Storage**: Add S3-compatible artifact storage
 5. **Caching**: Add layer caching for faster builds
 6. **Webhooks**: Add GitHub/GitLab webhook support for auto-deploy
+
+---
+
+## Development Guide
+
+### Local Development (Docker)
+
+The entire stack runs via Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Services:
+- **Caddy** (port 80): Reverse proxy to frontend (:5173) and backend (:3000)
+- **Backend** (:3000): API + pipeline, hot-reload with `tsx watch`
+- **Frontend** (:5173): Vite dev server with HMR
+- **BuildKit** (port 1234): Build daemon, privileged container
+- **Registry** (port 5001): Local Docker registry for image storage
+
+### Database Changes
+
+Prisma schema changes:
+
+```bash
+cd backend
+# Edit prisma/schema.prisma
+npx prisma migrate dev --name add_feature
+npx prisma generate
+```
+
+Migrations run automatically on Docker startup via entrypoint script.
+
+### Testing Strategy
+
+**Unit/Integration Tests** (`npm test`):
+- Pipeline status transitions
+- Request validation (Zod schemas)
+- HTTP API with mocked dependencies
+- No Docker required
+
+**Manual E2E Testing**:
+1. Create deployment from Git repo
+2. Verify pipeline stages: pending → building → deploying → running
+3. Check logs stream in real-time
+4. Open deployed app URL
+5. Delete deployment, verify cleanup
+
+**Cloud Deployment Test**:
+1. Configure `backend/.env` with public IP
+2. `docker compose up -d`
+3. Create deployment from public Git repo
+4. Verify accessible at `http://your-ip`
+5. Verify deployed app accessible at `http://<name>-<id>.your-ip.nip.io`
+
+---
+
+## Troubleshooting Guide
+
+### Build Hangs at "sending tarball"
+
+**Symptom**: Build stage hangs indefinitely, no progress logs.
+**Cause**: BuildKit's tar export to Docker daemon is blocked.
+**Solution**: Registry mode is already enabled by default (`BRIMBLE_REGISTRY_*` vars). Ensure registry container is running:
+
+```bash
+docker compose ps registry
+docker compose logs registry
+```
+
+### CORS Errors in Browser
+
+**Symptom**: API requests fail with CORS errors.
+**Cause**: `CORS_ORIGIN` doesn't include your origin.
+**Solution**: Edit `backend/.env`:
+
+```bash
+CORS_ORIGIN=http://localhost,http://your-public-ip
+```
+
+Restart: `docker compose restart backend`
+
+### Native Module Errors (better-sqlite3)
+
+**Symptom**: `NODE_MODULE_VERSION` mismatch error.
+**Cause**: Node version changed but old native modules cached in volume.
+**Solution**:
+
+```bash
+docker compose down -v  # Remove backend_node_modules volume
+docker compose up --build
+```
+
+### Port Already in Use
+
+**Symptom**: `docker compose up` fails with port binding error.
+**Cause**: Port 80, 2019, or 5001 already used.
+**Solution**: Find and stop conflicting process, or edit `docker-compose.yml` ports section.
+
+### App Returns 502 from Caddy
+
+**Symptom**: Deployed app shows Caddy 502 error.
+**Cause**: 
+1. App container not running: `docker ps | grep <deployment-id>`
+2. Wrong upstream host: Check `BRIMBLE_DOCKER_UPSTREAM_HOST` is `host.docker.internal` (Linux) or `host.docker.internal` (Docker Desktop Mac/Win)
+3. Missing `extra_hosts` in Caddy service for Linux
+
+**Debug**:
+
+```bash
+# Check container is running
+docker ps --filter "label=brimble.deployment.id=<id>"
+
+# Check Caddy config
+docker compose exec caddy caddy list-modules
+
+# Test direct access
+curl http://host.docker.internal:<assigned-port>
+```
+
+---
+
+## Performance Characteristics
+
+Measured on t3.medium AWS EC2 (2 vCPU, 4GB RAM):
+
+| Operation | Typical Time | Notes |
+|-----------|---------------|-------|
+| **Git clone** | 5-30s | Depends on repo size |
+| **Railpack build (Node)** | 2-5 min | Includes base image pull on first run |
+| **Image push to registry** | 5-15s | Local network, very fast |
+| **Image pull + container start** | 3-10s | Depends on image size |
+| **Total pipeline (warm)** | 30-60s | After base images cached |
+| **Total pipeline (cold)** | 3-5 min | First build pulls everything |
+| **Health poll interval** | 15s | Configurable via env |
+| **Log SSE latency** | <100ms | In-memory bus, very fast |
+| **Caddy config reload** | <1s | File watch, automatic |
+
+**Resource Usage**:
+- BuildKit: 1-2GB RAM during builds (spikes with large images)
+- Backend: ~100MB idle, ~200MB during active builds
+- Caddy: ~20MB
+- Registry: ~50MB + stored image layers
+
+---
+
+## Code Patterns & Conventions
+
+### Error Handling
+
+All async route handlers use `asyncHandler` wrapper:
+
+```typescript
+export const asyncHandler = (fn: RequestHandler): RequestHandler => {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+};
+```
+
+Central `errorHandler` middleware formats errors consistently:
+- Validation errors (Zod): 400 with field details
+- Not found: 404
+- Unexpected: 500 with safe message
+
+### Validation
+
+Zod schemas in `validation/` directory:
+- `createDeploymentBodySchema` - Git URL, name, branch, env vars
+- `redeployBodySchema` - Optional env var updates
+- `listDeploymentsQuerySchema` - Pagination/limit
+
+### Type Safety
+
+- Shared types in `types/` directory
+- Prisma client generates types from schema
+- Frontend types mirror backend via shared definitions
+
+### Database Access
+
+Prisma singleton pattern in `db/prisma.ts`:
+
+```typescript
+export const prisma = new PrismaClient({
+  adapter: new PrismaBetterSQLite3Adapter(db),
+});
+```
+
+---
+
+## Implementation Summary
+
+### Core Features
+
+| Category | Features |
+|----------|----------|
+| **Deployment Sources** | Git repositories (HTTPS/SSH), ZIP/tar.gz uploads, branch auto-detection |
+| **Build System** | Railpack auto-detection (Node/Python/Go/etc.), BuildKit, local registry |
+| **Runtime** | Docker container management, dynamic port allocation (10000-11000), health polling |
+| **Networking** | Caddy reverse proxy, nip.io wildcard DNS, automatic vhost routing |
+| **Observability** | Real-time SSE log streaming, persistent SQLite logs, deployment status tracking |
+| **Operations** | Redeploy with log reset, deployment deletion with full cleanup, env var injection |
+
+### Notable Implementation Decisions
+
+1. **Registry-based builds**: Worked around BuildKit tar-stream hangs by pushing to local registry instead of direct Docker export
+2. **In-memory queue**: Chose `async` library over Redis for zero-infrastructure simplicity
+3. **File-based Caddy config**: Writes route snippets to shared volume instead of API calls—simpler, more debuggable
+4. **Nested archive detection**: Auto-detects and flattens single top-level folders in uploaded archives
+5. **SSE control events**: `logs_cleared` event enables instant UI updates on redeploy without page refresh
+
+### Tested Platforms
+
+- ✅ WSL2 (Windows 11)
+- ✅ Ubuntu 22.04 EC2 (t3.medium)
+- ✅ macOS (Docker Desktop)

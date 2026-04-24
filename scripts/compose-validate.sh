@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Optional Phase 9.4 check: validate compose file and (optionally) bring stack up, hit health, tear down.
+# Validate docker-compose.yml and optionally run smoke test (up → health check → down)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
