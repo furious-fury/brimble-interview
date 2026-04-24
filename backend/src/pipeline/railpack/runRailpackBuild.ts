@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
 import readline from "node:readline";
+import { PIPELINE_CONSTANTS } from "../../config/constants.js";
 import { appendLog } from "../../services/logService.js";
 import { patchRailpackPlanRelaxedLockfile } from "./patchRailpackLockfile.js";
 
@@ -129,7 +130,7 @@ export async function runRailpackBuild(opts: {
   const pullRef = toRegistryRef(registryPullHost(), imageTag);
 
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "brimble-railpack-"));
-  const planName = "railpack-plan.json";
+  const planName = PIPELINE_CONSTANTS.RAILPACK_PLAN_NAME;
   const planPath = path.join(tmpDir, planName);
   let containerPort = Number(process.env.BRIMBLE_CONTAINER_PORT) || 3000;
 

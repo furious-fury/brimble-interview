@@ -12,7 +12,6 @@ const deploymentSelect = {
   containerId: true,
   url: true,
   port: true,
-  // envVars is not in the generated client yet, add after migration
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DeploymentSelect;

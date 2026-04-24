@@ -3,6 +3,8 @@ import path from "node:path";
 import { Router, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
+import { API_CONSTANTS } from "../config/constants.js";
+import { logger } from "../config/logger.js";
 import { enqueueDeployment } from "../pipeline/queue.js";
 import { cleanupDeploymentWorkspace } from "../pipeline/workspace/cleanup.js";
 import { extractArchiveToSource, isAllowedArchive } from "../pipeline/workspace/extractArchive.js";
@@ -24,9 +26,7 @@ import { badRequestError, notFoundError } from "../middleware/errorHandler.js";
 import { normalizeGitSourceForCreate } from "../lib/gitSourceNormalize.js";
 import { createDeploymentBodySchema, listDeploymentsQuerySchema, redeployBodySchema } from "../validation/deployments.js";
 
-const LOG_REPLAY_MAX = 500;
-const HEARTBEAT_MS = 20_000;
-const UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+const { LOG_REPLAY_MAX, HEARTBEAT_MS, UPLOAD_MAX_BYTES } = API_CONSTANTS;
 const uploadMemory = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: UPLOAD_MAX_BYTES },
@@ -128,8 +128,12 @@ router.post(
       enqueueDeployment(d.id);
       res.status(201).json({ data: updated });
     } catch (e) {
-      await deleteDeployment(d.id).catch(() => {});
-      await cleanupDeploymentWorkspace(d.id).catch(() => {});
+      await deleteDeployment(d.id).catch((err) => {
+        logger.warn({ deploymentId: d.id, err }, "Failed to delete deployment during cleanup");
+      });
+      await cleanupDeploymentWorkspace(d.id).catch((err) => {
+        logger.warn({ deploymentId: d.id, err }, "Failed to cleanup workspace");
+      });
       throw e;
     }
   })

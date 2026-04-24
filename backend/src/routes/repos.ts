@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { spawn } from "node:child_process";
+import { GIT_CONSTANTS } from "../config/constants.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { badRequestError } from "../middleware/errorHandler.js";
 
@@ -13,7 +14,7 @@ interface LsRemoteResult {
 function runGitLsRemote(args: string[], url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", ["ls-remote", ...args, url], {
-      timeout: 15000,
+      timeout: GIT_CONSTANTS.LS_REMOTE_TIMEOUT_MS,
     });
     let stdout = "";
     let stderr = "";

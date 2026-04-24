@@ -1,3 +1,4 @@
+import { logger } from "../config/logger.js";
 import { runPipeline } from "./engine.js";
 
 const jobQueue: string[] = [];
@@ -20,7 +21,7 @@ async function runWorker(): Promise<void> {
       try {
         await runPipeline(id);
       } catch (e) {
-        console.error(`[pipeline] runPipeline error for ${id}`, e);
+        logger.error({ deploymentId: id, err: e }, "Pipeline execution failed");
       }
     }
   } finally {

@@ -1,3 +1,4 @@
+import { logger } from "../config/logger.js";
 import { removeDeploymentCaddyRoute } from "../caddyClient.js";
 import { deploymentAppHostname } from "../deploymentAppHost.js";
 import { getDeploymentById } from "./deploymentService.js";
@@ -34,7 +35,7 @@ export async function destroyDeploymentRuntime(deploymentId: string): Promise<vo
     legacyDeploymentId: deploymentId,
   });
   if (!removed.ok) {
-    console.warn(`[brimble] Caddy route not removed: ${removed.note}`);
+    logger.warn({ note: removed.note }, "Caddy route not removed during cleanup");
   }
   if (!d) {
     return;

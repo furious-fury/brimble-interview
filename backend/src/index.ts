@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { buildApp } from "./app.js";
+import { logger } from "./config/logger.js";
 import { startContainerHealthLoop } from "./services/containerHealth.js";
 import { pingDocker } from "./services/dockerClient.js";
 import { initPortRegistryFromDocker } from "./services/portAllocator.js";
@@ -12,18 +13,18 @@ void (async () => {
   try {
     await pingDocker();
   } catch (e) {
-    console.warn(
-      "[brimble-api] Docker ping failed — deploy will not work until the socket is reachable:",
-      e
+    logger.warn(
+      { err: e },
+      "Docker ping failed — deploy will not work until the socket is reachable"
     );
   }
   try {
     await initPortRegistryFromDocker();
   } catch (e) {
-    console.warn("[brimble-api] Port registry init failed:", e);
+    logger.warn({ err: e }, "Port registry init failed");
   }
   startContainerHealthLoop();
   app.listen(port, host, () => {
-    console.log(`[brimble-api] http://${host}:${port}`);
+    logger.info(`Server listening on http://${host}:${port}`);
   });
 })();

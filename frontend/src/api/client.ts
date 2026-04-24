@@ -16,7 +16,10 @@ export class ApiError extends Error {
 async function parseError(res: Response): Promise<never> {
   const j = (await res
     .json()
-    .catch(() => ({}))) as Partial<ApiErrorBody>;
+    .catch((e) => {
+      console.warn("API error response parsing failed:", e);
+      return {};
+    })) as Partial<ApiErrorBody>;
   const msg = j.error?.message ?? res.statusText;
   const code = j.error?.code ?? "UNKNOWN";
   throw new ApiError(res.status, code, msg);

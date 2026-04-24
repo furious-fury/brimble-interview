@@ -1,6 +1,7 @@
 import { mkdir, unlink, writeFile, utimes } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { logger } from "./config/logger.js";
 
 const applyBody = z.object({
   /** e.g. myapp.localhost (no port) — also used for the on-disk name: `myapp.localhost.caddy` */
@@ -80,7 +81,7 @@ export async function registerDeploymentRouteWithReload(
         await touchCaddyfile(getMainCaddyfilePath());
       }
     } catch (e) {
-      console.warn("Could not touch Caddyfile; route may not reload until manual reload", e);
+      logger.warn({ err: e }, "Could not touch Caddyfile to trigger reload");
     }
   }
   return w;
@@ -127,7 +128,7 @@ export async function removeDeploymentCaddyRoute(opts: {
         await touchCaddyfile(getMainCaddyfilePath());
       }
     } catch (e) {
-      console.warn("Could not touch Caddyfile after route removal", e);
+      logger.warn({ err: e }, "Could not touch Caddyfile after route removal");
     }
   }
   return { ok: true, note: "Removed" };
