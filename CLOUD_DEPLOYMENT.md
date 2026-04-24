@@ -24,15 +24,15 @@ nano .env  # or use your preferred editor
 **Uncomment and update these key variables for your public IP:**
 
 ```bash
-# CORS - allow your public IP (replace 13.50.5.50 with your actual IP)
-CORS_ORIGIN=http://13.50.5.50,http://localhost
+# CORS - allow your public IP (replace <YOUR_PUBLIC_IP> with your actual IP)
+CORS_ORIGIN=http://<YOUR_PUBLIC_IP>,http://localhost
 
 # Base domain for deployed apps (use nip.io for automatic wildcard DNS)
-# This gives you URLs like: my-app-12345678.13.50.5.50.nip.io
-BRIMBLE_APPS_BASE_DOMAIN=13.50.5.50.nip.io
+# This gives you URLs like: my-app-12345678.<YOUR_PUBLIC_IP>.nip.io
+BRIMBLE_APPS_BASE_DOMAIN=<YOUR_PUBLIC_IP>.nip.io
 
 # Public base for app access
-BRIMBLE_APP_PUBLIC_BASE=http://13.50.5.50
+BRIMBLE_APP_PUBLIC_BASE=http://<YOUR_PUBLIC_IP>
 ```
 
 **To find your public IP:**
@@ -82,10 +82,10 @@ BRIMBLE_CONTAINER_PORT=3000
 BRIMBLE_HEALTH_POLL_MS=15000
 BRIMBLE_DOCKER_UPSTREAM_HOST=host.docker.internal
 
-# Cloud-Specific Configuration (replace 13.50.5.50 with your actual public IP)
-CORS_ORIGIN=http://13.50.5.50,http://localhost
-BRIMBLE_APPS_BASE_DOMAIN=13.50.5.50.nip.io
-BRIMBLE_APP_PUBLIC_BASE=http://13.50.5.50
+# Cloud-Specific Configuration (replace <YOUR_PUBLIC_IP> with your actual public IP)
+CORS_ORIGIN=http://<YOUR_PUBLIC_IP>,http://localhost
+BRIMBLE_APPS_BASE_DOMAIN=<YOUR_PUBLIC_IP>.nip.io
+BRIMBLE_APP_PUBLIC_BASE=http://<YOUR_PUBLIC_IP>
 ```
 
 ## Troubleshooting

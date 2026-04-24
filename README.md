@@ -73,6 +73,37 @@ User → Caddy (:80) → Frontend (Vite) + Backend API (Express)
 
 **Why this matters:** This was the difference between a working demo and a broken pipeline. The fix required understanding BuildKit's internals and Docker's registry protocol.
 
+### Build Robustness: Framework-Aware Auto-Detection & Validation
+
+**Problem:** Frameworks have different build modes (static vs server). Projects configured for static hosting (Netlify/Vercel) crash in containers because they produce HTML files instead of server runtimes.
+
+**Solution: Two-layer robustness for multiple frameworks**
+
+1. **Pre-build Auto-Fix** (Framework-aware):
+   - **Next.js**: Detects `output: 'export'`, auto-removes to enable server mode
+   - **SvelteKit**: Detects `@sveltejs/adapter-static`, warns to use `adapter-node`
+   - **Nuxt**: Detects `nitro: { preset: 'static' }`, warns about container incompatibility
+   - All fixes create backups and revert after build
+
+2. **Post-build Validation** (Framework-specific):
+   - **Next.js**: Verifies `.next/` directory with server files
+   - **SvelteKit**: Checks `.svelte-kit/output` or `build/` exists
+   - **Nuxt**: Confirms `.output/` directory present
+   - Fails fast with clear framework-specific error messages
+
+**Result:** Users get actionable errors immediately instead of mysterious runtime crashes. No wasted build time on configurations that can't work in containers.
+
+**Examples:**
+```
+⚠️ Detected Next.js 'output: "export"' mode. This creates static HTML files
+incompatible with containerized deployment.
+🔧 Auto-fixing next.config.js: temporarily removing 'output: "export"' for
+containerized build
+
+⚠️ Detected SvelteKit with static adapter. This creates static HTML files.
+Use '@sveltejs/adapter-node' for containerized server deployment.
+```
+
 ## Stack
 
 - **Frontend:** Vite, React, TanStack (Query, Router)

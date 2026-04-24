@@ -268,6 +268,160 @@ docker compose exec buildkit buildctl build \
 
 This isolated the issue to the `type=docker` export specifically, confirming the registry workaround.
 
+---
+
+### Build System Robustness: Multi-Framework Detection & Auto-Fix
+
+**Problem: Framework Static Mode Incompatibility**
+
+Modern frameworks support both **static site generation** (for Netlify/Vercel) and **server-side rendering** (for containers). When configured for static mode, they produce HTML files instead of server runtimes. In containers, this causes runtime crashes because there's no server to start.
+
+**Framework-Specific Issues:**
+
+| Framework | Static Mode Config | Container Runtime | Failure |
+|-----------|-------------------|-------------------|---------|
+| **Next.js** | `output: 'export'` | `next start` | "Could not find production build in 'dist'" |
+| **SvelteKit** | `@sveltejs/adapter-static` | Node server | No server entry point |
+| **Nuxt** | `nitro: { preset: 'static' }` | `node .output/server/index.mjs` | Missing server bundle |
+
+**Manifests as:**
+- Build stage: ✅ Success (static files generated)
+- Deploy stage: ✅ Success (container created)
+- Runtime: ❌ Crash - no server files found
+
+**Solution: Multi-Framework Two-Layer Validation**
+
+#### Layer 1: Pre-Build Auto-Detection & Fix
+
+**Implementation** (`pipeline/stages/buildStage.ts:detectConfigIssues()`):
+
+Framework-agnostic detection system with framework-specific checkers:
+
+```typescript
+const FRAMEWORK_CHECKERS: Record<string, ConfigChecker> = {
+  // Next.js: output: 'export' → static HTML
+  nextjs: (cwd, content, configPath) => {
+    if (content.match(/output:\s*['"]export['"]/)) {
+      return {
+        issue: "Detected Next.js 'output: "export"' mode",
+        autoFix: removeExportLine(configPath, content),
+      };
+    }
+  },
+
+  // SvelteKit: @sveltejs/adapter-static → no server
+  sveltekit: (cwd, content, configPath) => {
+    if (content.includes("@sveltejs/adapter-static")) {
+      return {
+        issue: "Detected SvelteKit with static adapter",
+        // No auto-fix, just warning - requires manual adapter change
+      };
+    }
+  },
+
+  // Nuxt: nitro preset 'static' → static HTML
+  nuxt: (cwd, content, configPath) => {
+    if (content.match(/preset:\s*['"]static['"]/)) {
+      return {
+        issue: "Detected Nuxt with static nitro preset",
+        // No auto-fix, just warning
+      };
+    }
+  },
+};
+```
+
+**Framework Detection Priority:**
+1. Check for `next.config.*` → Next.js
+2. Check for `svelte.config.*` → SvelteKit  
+3. Check for `nuxt.config.*` → Nuxt
+4. Check for `vite.config.*` → Vite (typically static)
+
+**Auto-Fix Process:**
+1. **Scan**: Check framework-specific config files after source extraction
+2. **Parse**: Run framework-specific pattern detection
+3. **Warn**: Log framework-specific warning about container incompatibility
+4. **Auto-fix**: Framework-aware fixes (backup → modify → revert)
+
+**Why revert?** Keeps the source repository unchanged. The fix is only for the build process, not the user's code.
+
+#### Layer 2: Post-Build Validation
+
+**Implementation** (`pipeline/stages/buildStage.ts:validateBuildOutput()`):
+
+Framework-specific output validation:
+
+```typescript
+const FRAMEWORK_VALIDATORS = {
+  nextjs: (cwd) => {
+    const nextDir = path.join(cwd, ".next");
+    if (!fs.existsSync(nextDir)) {
+      return {
+        valid: false,
+        error: "Next.js build completed but '.next/' directory not found..."
+      };
+    }
+  },
+
+  sveltekit: (cwd) => {
+    const outputDir = path.join(cwd, ".svelte-kit", "output");
+    const buildDir = path.join(cwd, "build");
+    if (!fs.existsSync(outputDir) && !fs.existsSync(buildDir)) {
+      return { valid: false, error: "SvelteKit build did not produce expected output..." };
+    }
+  },
+
+  nuxt: (cwd) => {
+    const outputDir = path.join(cwd, ".output");
+    if (!fs.existsSync(outputDir)) {
+      return { valid: false, error: "Nuxt build did not produce '.output/' directory..." };
+    }
+  },
+};
+```
+
+**Result:**
+
+| Framework | Static Config | Before | After Robustness |
+|-----------|--------------|--------|------------------|
+| **Next.js** | `output: 'export'` | Silent success, runtime crash | ⚠️ Warning + auto-fix |
+| **SvelteKit** | `adapter-static` | Silent success, runtime crash | ⚠️ Warning (manual fix) |
+| **Nuxt** | `preset: 'static'` | Silent success, runtime crash | ⚠️ Warning (manual fix) |
+| **All** | Missing output | Deploy succeeds, app 502s | ❌ Build fails with clear error |
+
+**Example Log Outputs:**
+
+**Next.js (with auto-fix):**
+```
+22:50:16 [build] warn ⚠️ Detected Next.js 'output: "export"' mode. 
+         This creates static HTML files incompatible with containerized deployment.
+22:50:16 [build] info 🔧 Auto-fixing next.config.ts: temporarily removing 
+         'output: "export"' for containerized build
+```
+
+**SvelteKit (manual fix required):**
+```
+22:50:16 [build] warn ⚠️ Detected SvelteKit with static adapter. 
+         This creates static HTML files. Use '@sveltejs/adapter-node' 
+         for containerized server deployment.
+```
+
+**Why This Matters**
+
+- **Wastes time**: 5+ minute builds that can't possibly work
+- **Poor UX**: Cryptic runtime errors vs. clear build-time guidance
+- **Common pattern**: Developers often start with static hosting, migrate to containers
+- **Framework diversity**: Build system adapts to multiple framework quirks
+
+**Extensibility**
+
+The detection system can easily add:
+- **More frameworks**: SvelteKit adapter-auto, Nuxt static mode, etc.
+- **More fixes**: Auto-detect and configure proper adapter for framework
+- **Validation rules**: Check for required env vars, validate package.json scripts
+
+---
+
 #### 4. Caddy Integration
 
 **Caddy Client** (`services/caddyClient.ts`):
@@ -859,6 +1013,8 @@ export const prisma = new PrismaClient({
 3. **File-based Caddy config**: Writes route snippets to shared volume instead of API calls—simpler, more debuggable
 4. **Nested archive detection**: Auto-detects and flattens single top-level folders in uploaded archives
 5. **SSE control events**: `logs_cleared` event enables instant UI updates on redeploy without page refresh
+6. **Multi-framework config auto-fix**: Detects and repairs static-mode configurations (Next.js export, SvelteKit static adapter, Nuxt static preset) to prevent runtime crashes
+7. **Post-build validation**: Verifies expected build outputs (`.next/`, `dist/`, etc.) exist before declaring build success
 
 ### Tested Platforms
 
