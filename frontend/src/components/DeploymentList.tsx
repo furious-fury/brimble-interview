@@ -36,6 +36,8 @@ export function DeploymentList() {
     },
   });
 
+  const data = q.data ?? [];
+
   if (q.isLoading) {
     return (
       <div className="space-y-4">
@@ -66,7 +68,6 @@ export function DeploymentList() {
     );
   }
 
-  const data = q.data ?? [];
   if (!data.length) {
     return (
       <div className="rounded-sm border border-dashed border-slate-200 bg-white px-6 py-12 text-center">

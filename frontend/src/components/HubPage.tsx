@@ -9,22 +9,19 @@ export function HubPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const [tab, setTab] = useState<Tab>("list");
-  const { showSuccess, showLoading, removeToast } = useToastActions();
+  const { showLoading } = useToastActions();
 
-  // Show toast when coming from delete
+  // Show loading toast when coming from delete
   useEffect(() => {
     if (search.deleting === "true") {
-      // Show deleting toast (optimistic - will auto-dismiss or be replaced)
-      const toastId = showLoading("Deleting deployment...");
+      // Show loading toast - backend delete takes time for Docker cleanup
+      // No auto-dismiss - stays until user closes it or refresh
+      showLoading("Deleting deployment... This may take 10-30 seconds for container cleanup");
+      
       // Clear the search param immediately
       void navigate({ to: "/", search: {}, replace: true });
-      // Remove toast after 3 seconds (optimistic assumption it succeeded)
-      setTimeout(() => {
-        removeToast(toastId);
-        showSuccess("Deployment deleted", 2000);
-      }, 3000);
     }
-  }, [search.deleting, showLoading, showSuccess, removeToast, navigate]);
+  }, [search.deleting, showLoading, navigate]);
 
   const goDetail = (id: string) => {
     void navigate({ to: "/deployments/$deploymentId", params: { deploymentId: id } });
