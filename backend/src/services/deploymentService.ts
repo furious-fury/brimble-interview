@@ -7,6 +7,7 @@ const deploymentSelect = {
   sourceType: true,
   source: true,
   sourceRef: true,
+  commitId: true,
   status: true,
   imageTag: true,
   containerId: true,
@@ -22,6 +23,7 @@ export type DeploymentDTO = {
   sourceType: string;
   source: string;
   sourceRef: string | null;
+  commitId: string | null;
   status: string;
   imageTag: string | null;
   containerId: string | null;
@@ -38,6 +40,7 @@ function toDTO(row: {
   sourceType: string;
   source: string;
   sourceRef: string | null;
+  commitId: string | null;
   status: string;
   imageTag: string | null;
   containerId: string | null;

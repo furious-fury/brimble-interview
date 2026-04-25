@@ -77,8 +77,8 @@ export function DeploymentDetailPage() {
       }
       // Show success toast briefly (1.5 seconds)
       showSuccess("Deployment deleted", 1500);
-      // Invalidate the deployments list and navigate
-      await qc.invalidateQueries({ queryKey: queryKeys.deployments() });
+      // Force immediate refetch of deployments list (not just invalidate)
+      await qc.refetchQueries({ queryKey: queryKeys.deployments(), type: 'all' });
       void navigate({ to: "/" });
     },
     onError: (error) => {
