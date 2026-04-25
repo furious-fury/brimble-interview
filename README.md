@@ -148,13 +148,21 @@ Base path: `/api`
 | `POST` | `/deployments/upload` | Create from ZIP/tar.gz archive (`multipart/form-data`, max 100MB) |
 | `GET` | `/deployments/:id` | Get deployment details |
 | `POST` | `/deployments/:id/redeploy` | Destroy runtime, clear logs, rebuild & redeploy |
-| `DELETE` | `/deployments/:id` | Stop container, remove Caddy route, delete logs & record |
+| `DELETE` | `/deployments/:id` | Stop container, **remove Docker image**, remove Caddy route, delete logs & record |
 | `GET` | `/deployments/:id/logs` | **SSE** log stream (replay last 500, then live) |
 | `GET` | `/repos/branches?url=` | List git branches for a repository |
 
 **Pipeline Stages:** `pending` → `building` (clone, Railpack, BuildKit, captures **commit hash** for git sources) → `deploying` (allocate port, start container) → `running` (Caddy vhost active, health polling). On failure: `failed`. Runtime logs stream with `stage: "runtime"`. Health checks every `BRIMBLE_HEALTH_POLL_MS` (15s) auto-mark stopped containers as failed.
 
 **Deployment Details:** Git deployments display the short commit hash (7 chars) alongside the branch/tag reference for traceability.
+
+**Automatic Resource Cleanup:** When a deployment is deleted or redeployed, the system automatically:
+- Stops and removes the Docker container
+- **Removes the Docker image** (prevents disk space accumulation)
+- Removes the Caddy route configuration
+- Releases the allocated host port
+- Clears runtime log streams
+- Deletes database records (on delete) or resets state (on redeploy)
 
 ## Cloud Deployment
 
@@ -202,6 +210,7 @@ Given another weekend, I would add:
 **Observability**
 - ✅ ~~Structured logging (JSON) with correlation IDs across pipeline stages~~ **DONE (Phase 10)**
 - ✅ ~~Toast notifications for user actions (delete, redeploy, errors)~~ **DONE**
+- ✅ ~~Docker image cleanup on deployment delete/redeploy~~ **DONE (Phase 11)**
 - Prometheus metrics: build duration, deploy success rate, queue depth
 - Distributed tracing: OpenTelemetry spans from API → pipeline → Docker
 

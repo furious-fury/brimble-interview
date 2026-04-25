@@ -24,7 +24,26 @@ export async function stopAndRemoveContainer(containerId: string | null | undefi
 }
 
 /**
- * Stops log follow, releases the host port in the in-process registry, and removes the container.
+ * Remove a Docker image by tag. Safe to call if image doesn't exist.
+ */
+export async function removeDockerImage(imageTag: string | null | undefined): Promise<void> {
+  if (!imageTag) {
+    return;
+  }
+  try {
+    const docker = getDocker();
+    const image = docker.getImage(imageTag);
+    await image.remove({ force: true });
+    logger.info({ imageTag }, "Removed Docker image");
+  } catch (err) {
+    // Image may not exist locally (already removed or never built)
+    logger.debug({ imageTag, err }, "Docker image not found or already removed");
+  }
+}
+
+/**
+ * Stops log follow, releases the host port in the in-process registry, removes the container,
+ * and cleans up the Docker image to prevent disk space accumulation.
  * Safe to call for stub or missing resources.
  */
 export async function destroyDeploymentRuntime(deploymentId: string): Promise<void> {
@@ -44,4 +63,6 @@ export async function destroyDeploymentRuntime(deploymentId: string): Promise<vo
     releaseHostPort(d.port);
   }
   await stopAndRemoveContainer(d.containerId);
+  // Remove Docker image to free up disk space
+  await removeDockerImage(d.imageTag);
 }

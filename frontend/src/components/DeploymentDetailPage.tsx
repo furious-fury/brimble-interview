@@ -1,4 +1,4 @@
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useParams, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ExternalLink,
@@ -31,6 +31,7 @@ export function DeploymentDetailPage() {
   const { deploymentId } = useParams({
     from: "/deployments/$deploymentId",
   });
+  const navigate = useNavigate();
   const { showLoading, removeToast, showError } = useToastActions();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmRedeployOpen, setConfirmRedeployOpen] = useState(false);
@@ -52,8 +53,8 @@ export function DeploymentDetailPage() {
       if (deleteToastId) {
         removeToast(deleteToastId);
       }
-      // Hard navigate to hub with success flag
-      window.location.replace("/?deleted=true");
+      // Show success then navigate to hub
+      navigate({ to: "/" });
     },
     onDeleteError: (error) => {
       // Remove loading toast and show error

@@ -925,7 +925,8 @@ Migrations run automatically on Docker startup via entrypoint script.
 2. Verify pipeline stages: pending → building → deploying → running
 3. Check logs stream in real-time
 4. Open deployed app URL
-5. Delete deployment, verify cleanup
+5. Delete deployment, verify cleanup (container stopped, image removed)
+6. **Disk space check**: `docker images | grep brimble/d-` should show no images after deletion
 
 **Cloud Deployment Test**:
 1. Configure `backend/.env` with public IP
@@ -1283,6 +1284,82 @@ Confirmation modals extracted as standalone components:
 
 ---
 
+## Phase 11: Docker Image Cleanup
+
+### Problem
+
+Docker images built by Railpack (`brimble/d-<deploymentId>:v1`) were accumulating indefinitely on the host system. Each deployment build created a new image, but images were never removed when deployments were deleted or redeployed. This caused:
+
+- Disk space exhaustion on EC2 instances
+- Increased `docker image ls` times
+- Potential registry storage bloat
+
+### Solution
+
+**Automatic Docker image cleanup** added to `destroyDeploymentRuntime()`:
+
+```typescript
+// backend/src/services/deploymentRuntime.ts
+export async function removeDockerImage(imageTag: string | null | undefined): Promise<void> {
+  if (!imageTag) return;
+  try {
+    const docker = getDocker();
+    const image = docker.getImage(imageTag);
+    await image.remove({ force: true });
+    logger.info({ imageTag }, "Removed Docker image");
+  } catch (err) {
+    // Image may not exist locally (already removed or never built)
+    logger.debug({ imageTag, err }, "Docker image not found or already removed");
+  }
+}
+```
+
+### Cleanup Triggers
+
+Docker images are now automatically cleaned up in these scenarios:
+
+1. **Deployment Deletion** (`DELETE /api/deployments/:id`)
+   - Container stopped and removed
+   - Docker image removed
+   - Caddy route removed
+   - Port released
+   - Database record deleted
+
+2. **Redeployment** (`POST /api/deployments/:id/redeploy`)
+   - Old container stopped and removed
+   - **Old Docker image removed** (prevents accumulation of stale images)
+   - New build creates fresh image
+   - Logs cleared for fresh start
+
+3. **Pipeline Failure** (`failPipeline()`)
+   - Runtime destroyed on failure
+   - Associated image cleaned up
+
+### Disk Space Impact
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| Delete deployment | Image remains | Image removed |
+| Redeploy (5x) | 6 images (1 old + 5 new) | 1 image (current only) |
+| Failed builds | Failed images accumulate | Failed images cleaned up |
+
+### Manual Cleanup (Emergency)
+
+If disk space is critically low before this fix was applied:
+
+```bash
+# Remove all dangling images
+docker image prune -f
+
+# Remove all brimble deployment images (DESTRUCTIVE)
+docker images --format '{{.Repository}}:{{.Tag}}' | grep '^brimble/d-' | xargs -r docker rmi -f
+
+# Full system cleanup (includes stopped containers, unused networks, dangling images)
+docker system prune -f --volumes
+```
+
+---
+
 ## Implementation Summary
 
 ### Core Features
@@ -1294,7 +1371,7 @@ Confirmation modals extracted as standalone components:
 | **Runtime** | Docker container management, dynamic port allocation (10000-11000), health polling |
 | **Networking** | Caddy reverse proxy, nip.io wildcard DNS, automatic vhost routing |
 | **Observability** | Real-time SSE log streaming, persistent SQLite logs, deployment status tracking |
-| **Operations** | Redeploy with log reset, deployment deletion with full cleanup, env var injection |
+| **Operations** | Redeploy with log reset, deployment deletion with **Docker image cleanup**, env var injection |
 
 ### Notable Implementation Decisions
 
@@ -1312,6 +1389,7 @@ Confirmation modals extracted as standalone components:
 12. **Caddy debug logging**: Comprehensive logging for route registration, hostname generation, and config reloading
 13. **Delete navigation fix**: Prevents 404 flash by disabling polling and clearing cached data before navigation
 14. **Git commit tracking**: Captures exact commit hash during clone for traceability, displays short hash (7 chars) in UI alongside branch/tag
+15. **Docker image cleanup (Phase 11)**: Automatic removal of built images on deployment delete/redeploy to prevent EC2 disk space exhaustion
 
 ### Tested Platforms
 
