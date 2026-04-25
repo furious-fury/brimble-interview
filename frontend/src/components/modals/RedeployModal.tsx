@@ -1,4 +1,4 @@
-import { ApiError } from "../../api/client.js";
+import { ApiError } from "@/api";
 
 interface RedeployModalProps {
   isOpen: boolean;

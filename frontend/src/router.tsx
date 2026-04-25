@@ -5,9 +5,7 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router";
-import { AppShell } from "./components/AppShell.js";
-import { DeploymentDetailPage } from "./components/DeploymentDetailPage.js";
-import { HubPage } from "./components/HubPage.js";
+import { AppShell, DeploymentDetailPage, HubPage } from "@/components";
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: function RootLayout() {
@@ -23,6 +21,11 @@ const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: HubPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    deleted: search.deleted === "true" ? "true" : undefined,
+    deleting: search.deleting === "true" ? "true" : undefined,
+    deploymentId: typeof search.deploymentId === "string" ? search.deploymentId : undefined,
+  }),
 });
 
 const deploymentRoute = createRoute({

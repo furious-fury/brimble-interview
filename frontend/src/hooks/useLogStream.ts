@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { LogEntry } from "../api/types.js";
+import type { LogEntry } from "@/api";
 
 export type ConnectionStatus = "connecting" | "live" | "reconnecting" | "error";
 

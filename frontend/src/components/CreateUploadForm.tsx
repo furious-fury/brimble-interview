@@ -1,10 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import { ApiError } from "../api/client.js";
-import { createUploadDeployment } from "../api/deploymentsApi.js";
-import { queryKeys } from "../api/queryKeys.js";
+import { ApiError, createUploadDeployment, queryKeys } from "@/api";
 import { FileArchive } from "lucide-react";
-import { EnvVarInput } from "./EnvVarInput.js";
+import { EnvVarInput } from "@/components";
 
 type Props = { onSuccessNavigate?: (id: string) => void };
 

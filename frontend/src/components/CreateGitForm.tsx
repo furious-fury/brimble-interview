@@ -1,25 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ApiError } from "../api/client.js";
-import { createGitDeployment } from "../api/deploymentsApi.js";
-import { queryKeys } from "../api/queryKeys.js";
-import { parseHttpsGitSource } from "../lib/gitSourceNormalize.js";
-import { BranchCombobox } from "./BranchCombobox.js";
-import { EnvVarInput } from "./EnvVarInput.js";
-
-function isValidSource(s: string): boolean {
-  const t = s.trim();
-  if (!t) return false;
-  return /^https?:\/\//i.test(t) || t.startsWith("git@");
-}
-
-function debounce<T extends (...args: string[]) => void>(fn: T, ms: number) {
-  let t: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
-}
+import { ApiError, createGitDeployment, queryKeys } from "@/api";
+import { parseHttpsGitSource, debounce, isValidGitSource } from "@/lib";
+import { BranchCombobox, EnvVarInput } from "@/components";
 
 type Props = { onSuccessNavigate?: (id: string) => void };
 
@@ -79,7 +62,7 @@ export function CreateGitForm({ onSuccessNavigate }: Props) {
       setLocalError("Name is required.");
       return;
     }
-    if (!isValidSource(source)) {
+    if (!isValidGitSource(source)) {
       setLocalError("Source must be an http(s) or git@ URL.");
       return;
     }

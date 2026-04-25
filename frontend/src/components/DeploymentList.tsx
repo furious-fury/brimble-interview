@@ -1,11 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink, RefreshCw } from "lucide-react";
-import { listDeployments } from "../api/deploymentsApi.js";
-import { queryKeys } from "../api/queryKeys.js";
-import { listHasInFlight } from "../lib/deploymentStatus.js";
-import { StatusBadge } from "./StatusBadge.js";
-import { ApiError } from "../api/client.js";
+import { listDeployments, queryKeys, ApiError } from "@/api";
+import { listHasInFlight } from "@/lib";
+import { StatusBadge } from "@/components";
 
 function formatWhen(iso: string) {
   try {

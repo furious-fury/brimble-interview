@@ -1,10 +1,7 @@
 import { useMemo, useState } from "react";
-import type { DeploymentStatus, LogStageName } from "../api/types.js";
-import { BuildTimer } from "./BuildTimer.js";
-import { ConnectionStatusBadge } from "./ConnectionStatusBadge.js";
-import { LogFilterButtons } from "./LogFilterButtons.js";
-import { LogTerminal } from "./LogTerminal.js";
-import { useLogStream } from "../hooks/useLogStream.js";
+import type { DeploymentStatus, LogStageName } from "@/api";
+import { BuildTimer, ConnectionStatusBadge, LogFilterButtons, LogTerminal } from "@/components";
+import { useLogStream } from "@/hooks";
 
 type LogViewerProps = {
   deploymentId: string;

@@ -1,104 +1,47 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams, useNavigate } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ExternalLink,
   Trash2,
   RotateCcw,
 } from "lucide-react";
-import { deleteDeployment, getDeployment, redeployDeployment } from "../api/deploymentsApi.js";
-import { ApiError } from "../api/client.js";
-import { queryKeys } from "../api/queryKeys.js";
-import { shouldPollSingle } from "../lib/deploymentStatus.js";
-import { LogViewer } from "./LogViewer.js";
-import { StatusBadge } from "./StatusBadge.js";
+import { ApiError } from "@/api";
+import { parseEnvVars } from "@/lib";
+import {
+  LogViewer,
+  StatusBadge,
+  DeleteDeploymentModal,
+  RedeployModal,
+  EnvVarDisplay,
+  SkeletonGroup,
+  Card,
+} from "@/components";
+import {
+  useDeploymentQuery,
+  useDeploymentActions,
+} from "@/hooks";
 import { useState } from "react";
-import { DeleteDeploymentModal } from "./modals/DeleteDeploymentModal.js";
-import { RedeployModal } from "./modals/RedeployModal.js";
-import { EnvVarDisplay } from "./EnvVarDisplay.js";
-import { useToastActions } from "../hooks/useToast.js";
-
-function parseEnvVars(envVarsJson: string | null): Record<string, string> {
-  if (!envVarsJson) return {};
-  try {
-    return JSON.parse(envVarsJson) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
 
 /**
  * Deployment detail page with logs, status, and actions.
- * Refactored to use composable modal components.
+ * Uses extracted hooks for data fetching and mutations.
  */
 export function DeploymentDetailPage() {
   const { deploymentId } = useParams({
     from: "/deployments/$deploymentId",
   });
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-  const { showLoading, showSuccess, showError, removeToast } = useToastActions();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmRedeployOpen, setConfirmRedeployOpen] = useState(false);
-  const [deleteToastId, setDeleteToastId] = useState<string | null>(null);
 
-  const [isDeleted, setIsDeleted] = useState(false);
-
-  const q = useQuery({
-    queryKey: queryKeys.deployment(deploymentId),
-    queryFn: () => getDeployment(deploymentId),
-    refetchInterval: (query) => {
-      if (isDeleted) return false;
-      const d = query.state.data;
-      if (!d) return 3000;
-      return shouldPollSingle(d.status) ? 3000 : false;
-    },
-    enabled: !isDeleted,
-  });
-
-  const del = useMutation({
-    mutationFn: () => deleteDeployment(deploymentId),
-    onMutate: () => {
-      // Close modal immediately for better UX
-      setConfirmDeleteOpen(false);
-      // Show loading toast (minimum 2 seconds for visibility)
-      const toastId = showLoading("Deleting deployment...");
-      setDeleteToastId(toastId);
-    },
-    onSuccess: () => {
-      // Navigate to hub immediately - toast will show there
-      void navigate({ to: "/", search: { deleted: "true" } });
-    },
-    onError: (error) => {
-      // Remove loading toast immediately
-      if (deleteToastId) {
-        removeToast(deleteToastId);
-      }
-      // Show error toast (5 seconds)
-      const message = error instanceof ApiError 
-        ? error.message 
-        : "Failed to delete deployment";
-      showError(message, 5000);
-      setDeleteToastId(null);
-    },
-  });
-
-  const redeploy = useMutation({
-    mutationFn: () => redeployDeployment(deploymentId),
-    onSuccess: async () => {
-      setConfirmRedeployOpen(false);
-      await qc.invalidateQueries({ queryKey: queryKeys.deployment(deploymentId) });
-    },
+  const q = useDeploymentQuery(deploymentId);
+  const actions = useDeploymentActions({
+    deploymentId,
+    onDeleteStart: () => setConfirmDeleteOpen(false),
+    onRedeploySuccess: () => setConfirmRedeployOpen(false),
   });
 
   if (q.isLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="h-6 w-40 animate-pulse rounded-sm bg-slate-100" />
-        <div className="h-32 animate-pulse rounded-sm bg-slate-100" />
-        <div className="h-64 animate-pulse rounded-sm bg-slate-100" />
-      </div>
-    );
+    return <SkeletonGroup lines={3} />;
   }
 
   if (q.isError) {
@@ -168,16 +111,16 @@ export function DeploymentDetailPage() {
             <button
               type="button"
               onClick={() => setConfirmRedeployOpen(true)}
-              disabled={redeploy.isPending}
+              disabled={actions.redeploy.isPending}
               className="inline-flex items-center gap-1.5 rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <RotateCcw className={`h-4 w-4 ${redeploy.isPending ? "animate-spin" : ""}`} />
-              {redeploy.isPending ? "Redeploying…" : "Redeploy"}
+              <RotateCcw className={`h-4 w-4 ${actions.redeploy.isPending ? "animate-spin" : ""}`} />
+              {actions.redeploy.isPending ? "Redeploying…" : "Redeploy"}
             </button>
             <button
               type="button"
               onClick={() => setConfirmDeleteOpen(true)}
-              disabled={del.isPending}
+              disabled={actions.delete.isPending}
               className="inline-flex items-center gap-1.5 rounded-sm border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
@@ -188,11 +131,8 @@ export function DeploymentDetailPage() {
       </div>
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2">
-        <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            Source
-          </p>
-          <p className="mt-1 break-all font-mono text-sm text-slate-700">
+        <Card title="Source">
+          <p className="break-all font-mono text-sm text-slate-700">
             {d.source}
           </p>
           {d.sourceRef && (
@@ -203,30 +143,27 @@ export function DeploymentDetailPage() {
               Commit: <span className="text-xs">{d.commitId.slice(0, 7)}</span>
             </p>
           )}
-        </div>
-        <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            Network
-          </p>
+        </Card>
+        <Card title="Network">
           {d.url ? (
-            <a 
+            <a
               href={d.url}
               target="_blank"
               rel="noreferrer"
-              className="mt-1 block break-all text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+              className="block break-all text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
             >
               {d.url}
             </a>
           ) : d.port != null ? (
-            <p className="mt-1 text-sm text-slate-700">
+            <p className="text-sm text-slate-700">
               <span>
                 Port <span className="font-mono tabular-nums">{d.port}</span> (host)
               </span>
             </p>
           ) : (
-            <p className="mt-1 text-sm text-slate-400">—</p>
+            <p className="text-sm text-slate-400">—</p>
           )}
-        </div>
+        </Card>
       </div>
 
       <EnvVarDisplay envVars={envVars} />
@@ -240,18 +177,18 @@ export function DeploymentDetailPage() {
 
       <RedeployModal
         isOpen={confirmRedeployOpen}
-        isPending={redeploy.isPending}
-        error={redeploy.error as Error | null}
+        isPending={actions.redeploy.isPending}
+        error={actions.redeploy.error as Error | null}
         onCancel={() => setConfirmRedeployOpen(false)}
-        onConfirm={() => redeploy.mutate()}
+        onConfirm={() => actions.redeploy.mutate()}
       />
 
       <DeleteDeploymentModal
         isOpen={confirmDeleteOpen}
-        isPending={del.isPending}
-        error={del.error as Error | null}
+        isPending={actions.delete.isPending}
+        error={actions.delete.error as Error | null}
         onCancel={() => setConfirmDeleteOpen(false)}
-        onConfirm={() => del.mutate()}
+        onConfirm={() => actions.delete.mutate()}
       />
     </div>
   );
