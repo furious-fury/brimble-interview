@@ -6,7 +6,6 @@ import { cleanupDeploymentWorkspace } from "../workspace/cleanup.js";
 import { gitCloneToWorkspace } from "../workspace/gitClone.js";
 import { getExtractedSourceDir } from "../workspace/paths.js";
 import { detectConfigIssues } from "../frameworkCheckers.js";
-import { validateBuildOutput } from "../buildValidation.js";
 import { PIPELINE_CONSTANTS } from "../../config/constants.js";
 import type { BuildResult, StageContext } from "./resultTypes.js";
 
@@ -167,16 +166,11 @@ export async function runBuildStage(ctx: StageContext): Promise<BuildResult> {
       signal: ctx.abortSignal,
     });
 
-    // Post-build validation: verify expected outputs exist
-    const validation = await validateBuildOutput(id, cwd);
-    if (!validation.valid) {
-      await appendLog(id, {
-        stage: "build",
-        level: "error",
-        message: validation.error!,
-      });
-      throw new Error(validation.error);
-    }
+    // Note: Post-build output validation removed because Railpack builds produce
+    // images in a registry, not local filesystem output. BuildKit validates the
+    // build succeeds - if it fails, we get a non-zero exit code.
+    // Framework-specific static mode detection is done in pre-build validation
+    // via detectConfigIssues() which checks config files.
 
     return result;
   } finally {

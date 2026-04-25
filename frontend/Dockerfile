@@ -9,8 +9,11 @@ COPY public ./public
 COPY src ./src
 
 FROM base AS dev
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 EXPOSE 5173
 ENV NODE_ENV=development
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["npm", "run", "dev"]
 
 FROM base AS build

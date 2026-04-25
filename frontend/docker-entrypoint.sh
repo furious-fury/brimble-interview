@@ -1,12 +1,6 @@
 #!/bin/sh
 set -e
 
-export DATABASE_URL="${DATABASE_URL:-file:/data/brimble.db}"
-export BRIMBLE_WORKSPACE="${BRIMBLE_WORKSPACE:-/data/work}"
-mkdir -p "$BRIMBLE_WORKSPACE" 2>/dev/null || true
-echo "[entrypoint] DATABASE_URL=$DATABASE_URL"
-echo "[entrypoint] BRIMBLE_WORKSPACE=$BRIMBLE_WORKSPACE"
-
 # Auto-install dependencies if package.json changed (for dev with named volumes)
 # Store a hash of package.json to detect changes
 PACKAGE_JSON_HASH_FILE="/app/node_modules/.package.json.hash"
@@ -20,6 +14,4 @@ if [ -f /app/package.json ]; then
   fi
 fi
 
-npx prisma generate
-npx prisma migrate deploy
 exec "$@"

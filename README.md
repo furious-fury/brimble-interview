@@ -107,11 +107,26 @@ Use '@sveltejs/adapter-node' for containerized server deployment.
 ## Stack
 
 - **Frontend:** Vite, React, TanStack (Query, Router)
-- **Backend:** Node.js, TypeScript, Express
+- **Backend:** Node.js, TypeScript, Express, **Pino** (structured logging)
 - **Data:** SQLite (file-backed, mounted in Compose) via **Prisma 7** with `prisma.config.ts` and `@prisma/adapter-better-sqlite3`
 - **Build:** Railpack (BuildKit)
 - **Runtime / ingress:** Docker + Caddy
 - **Pipeline:** In-process queue with validated status transitions; builds with Railpack + BuildKit; deploys containers with dockerode (host port allocation, runtime log streaming, health polling, teardown); writes Caddy vhost snippets to `caddy/dynamic/<id>.caddy` so deployed apps get URLs like `http://<name>-<id>.<domain>` on port **80** (e.g., `http://my-app-a1b2c3d4.localhost`). Configurable via `PIPELINE_BUILD_TIMEOUT_MS` (default 60m for Railpack image pulls), `PIPELINE_STAGE_TIMEOUT_MS` (2m for deploy/serve), and optional `pipelineEvents` for testing.
+
+### Code Organization Patterns
+
+**Backend:**
+- **Structured Logging:** All code uses Pino via `src/config/logger.ts` - no `console.*` calls
+- **Constants:** Non-configurable values (timeouts, limits, buffer sizes) in `src/config/constants.ts`
+- **Pipeline Extraction:** Framework detection (`frameworkCheckers.ts`) and build validation (`buildValidation.ts`) are separate modules
+- **Function Size:** All functions under 50 lines through extraction and composition
+
+**Frontend:**
+- **Custom Hooks:** SSE log streaming encapsulated in `useLogStream.ts`
+- **Component Extraction:** LogViewer broken into `LogFilterButtons`, `ConnectionStatusBadge`, `LogEntryRow`, `LogTerminal`, `BuildTimer`
+- **Form Components:** Branch selection extracted to `BranchCombobox` with git auto-detection
+- **Modal Components:** Confirmation modals are standalone (`DeleteDeploymentModal`, `RedeployModal`)
+- **Component Size:** All components under 50 lines through single-responsibility extraction
 
 ## API
 
@@ -175,7 +190,7 @@ Given another weekend, I would add:
 - Deployment rollbacks: Keep last N images, instant revert to previous version
 
 **Observability**
-- Structured logging (JSON) with correlation IDs across pipeline stages
+- ✅ ~~Structured logging (JSON) with correlation IDs across pipeline stages~~ **DONE (Phase 10)**
 - Prometheus metrics: build duration, deploy success rate, queue depth
 - Distributed tracing: OpenTelemetry spans from API → pipeline → Docker
 

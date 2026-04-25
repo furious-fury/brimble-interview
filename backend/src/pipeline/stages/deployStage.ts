@@ -18,10 +18,10 @@ async function ensureImageAvailable(image: string): Promise<void> {
     // pull below
   }
   await new Promise<void>((resolve, reject) => {
-    docker.pull(image, (err, stream) => {
+    docker.pull(image, (err: Error | null, stream: NodeJS.ReadableStream | null) => {
       if (err) return reject(err);
       if (!stream) return reject(new Error("Docker pull returned no stream"));
-      docker.modem.followProgress(stream, (e) => (e ? reject(e) : resolve()));
+      docker.modem.followProgress(stream, (e: Error | null) => (e ? reject(e) : resolve()));
     });
   });
 }
