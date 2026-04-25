@@ -1,14 +1,26 @@
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { CreateGitForm } from "./CreateGitForm.js";
 import { CreateUploadForm } from "./CreateUploadForm.js";
 import { DeploymentList } from "./DeploymentList.js";
+import { useToastActions } from "../hooks/useToast.js";
 
 type Tab = "new" | "list";
 
 export function HubPage() {
   const navigate = useNavigate();
+  const search = useSearch({ from: "/" });
   const [tab, setTab] = useState<Tab>("list");
+  const { showSuccess } = useToastActions();
+
+  // Show success toast when coming from delete
+  useEffect(() => {
+    if (search.deleted === "true") {
+      showSuccess("Deployment deleted successfully", 3000);
+      // Clear the search param
+      void navigate({ to: "/", search: {} });
+    }
+  }, [search.deleted, showSuccess, navigate]);
 
   const goDetail = (id: string) => {
     void navigate({ to: "/deployments/$deploymentId", params: { deploymentId: id } });

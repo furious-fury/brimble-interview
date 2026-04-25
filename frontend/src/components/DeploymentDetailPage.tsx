@@ -65,21 +65,9 @@ export function DeploymentDetailPage() {
       const toastId = showLoading("Deleting deployment...");
       setDeleteToastId(toastId);
     },
-    onSuccess: async () => {
-      // Mark as deleted to stop polling
-      setIsDeleted(true);
-      // Cancel and remove the deployment query to prevent 404 errors
-      await qc.cancelQueries({ queryKey: queryKeys.deployment(deploymentId) });
-      qc.removeQueries({ queryKey: queryKeys.deployment(deploymentId) });
-      // Remove loading toast immediately
-      if (deleteToastId) {
-        removeToast(deleteToastId);
-      }
-      // Show success toast briefly (1.5 seconds)
-      showSuccess("Deployment deleted", 1500);
-      // Force immediate refetch of deployments list (not just invalidate)
-      await qc.refetchQueries({ queryKey: queryKeys.deployments(), type: 'all' });
-      void navigate({ to: "/" });
+    onSuccess: () => {
+      // Navigate to hub immediately - toast will show there
+      void navigate({ to: "/", search: { deleted: "true" } });
     },
     onError: (error) => {
       // Remove loading toast immediately
