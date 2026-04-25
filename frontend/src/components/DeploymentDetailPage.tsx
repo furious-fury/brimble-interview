@@ -19,6 +19,7 @@ import {
 import {
   useDeploymentQuery,
   useDeploymentActions,
+  useToastActions,
 } from "@/hooks";
 import { useState } from "react";
 
@@ -30,13 +31,37 @@ export function DeploymentDetailPage() {
   const { deploymentId } = useParams({
     from: "/deployments/$deploymentId",
   });
+  const { showLoading, removeToast, showError } = useToastActions();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmRedeployOpen, setConfirmRedeployOpen] = useState(false);
+  const [deleteToastId, setDeleteToastId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const q = useDeploymentQuery(deploymentId);
+  const q = useDeploymentQuery(deploymentId, isDeleting);
   const actions = useDeploymentActions({
     deploymentId,
-    onDeleteStart: () => setConfirmDeleteOpen(false),
+    onDeleteStart: () => {
+      setConfirmDeleteOpen(false);
+      setIsDeleting(true);
+      // Show loading toast - will stay until delete completes
+      const toastId = showLoading("Deleting deployment... Container cleanup in progress");
+      setDeleteToastId(toastId);
+    },
+    onDeleteSuccess: () => {
+      // Remove loading toast
+      if (deleteToastId) {
+        removeToast(deleteToastId);
+      }
+      // Hard navigate to hub with success flag
+      window.location.replace("/?deleted=true");
+    },
+    onDeleteError: (error) => {
+      // Remove loading toast and show error
+      if (deleteToastId) {
+        removeToast(deleteToastId);
+      }
+      showError(error.message || "Delete failed");
+    },
     onRedeploySuccess: () => setConfirmRedeployOpen(false),
   });
 

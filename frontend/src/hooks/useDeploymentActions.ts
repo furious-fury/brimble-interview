@@ -1,37 +1,35 @@
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { deleteDeployment, redeployDeployment } from "@/api";
 
 interface UseDeploymentActionsOptions {
   deploymentId: string;
   onDeleteStart?: () => void;
+  onDeleteSuccess?: () => void;
+  onDeleteError?: (error: Error) => void;
   onRedeploySuccess?: () => void;
 }
 
 /**
- * Hook for deployment actions (delete, redeploy) with optimistic updates.
+ * Hook for deployment actions (delete, redeploy).
+ * Delete waits for API completion before calling onDeleteSuccess.
  */
 export function useDeploymentActions({
   deploymentId,
   onDeleteStart,
+  onDeleteSuccess,
+  onDeleteError,
   onRedeploySuccess,
 }: UseDeploymentActionsOptions) {
-  const navigate = useNavigate();
-
   const deleteMutation = useMutation({
     mutationFn: () => deleteDeployment(deploymentId),
     onMutate: () => {
-      // Close modal and trigger callback
       onDeleteStart?.();
-      // Navigate to hub immediately with deleting state (optimistic)
-      navigate({
-        to: "/",
-        search: { deleting: "true", deploymentId },
-      });
+    },
+    onSuccess: () => {
+      onDeleteSuccess?.();
     },
     onError: (error) => {
-      // Error will be handled by the hub showing error toast
-      console.error("Delete failed:", error);
+      onDeleteError?.(error instanceof Error ? error : new Error(String(error)));
     },
   });
 
