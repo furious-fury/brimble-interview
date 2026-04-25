@@ -18,6 +18,13 @@ docker compose up --build
 
 Access the UI at **http://localhost** (Caddy on port 80; proxies `/api` to the API and other paths to the Vite dev server).
 
+### Sample Repository for Testing
+
+Use this sample Next.js app to test the deployment pipeline:
+- **https://github.com/furious-fury/paylance**
+
+Just paste the URL into the "Git Repository" field in the UI and deploy!
+
 ## Architecture
 
 ```
