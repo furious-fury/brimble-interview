@@ -30,7 +30,7 @@ function toRegistryRef(host: string, image: string): string {
   return `${host}/${image}`;
 }
 
-async function inferContainerPortFromPlan(planPath: string): Promise<number | null> {
+async function inferContainerPortFromPlan(planPath: string): Promise<{ port: number | null; startCommand?: string }> {
   try {
     const raw = await fs.readFile(planPath, "utf8");
     const plan = JSON.parse(raw) as any;
@@ -42,12 +42,16 @@ async function inferContainerPortFromPlan(planPath: string): Promise<number | nu
 
     if (typeof startCommand === "string") {
       // Railpack static site plans typically run Caddy on :80.
-      if (startCommand.includes("caddy") && startCommand.includes("run")) return 80;
+      if (startCommand.includes("caddy") && startCommand.includes("run")) {
+        return { port: 80, startCommand };
+      }
+      // Log other start commands for debugging
+      return { port: null, startCommand };
     }
   } catch {
     // ignore
   }
-  return null;
+  return { port: null };
 }
 
 async function streamChildLines(opts: {
@@ -150,14 +154,33 @@ export async function runRailpackBuild(opts: {
       signal,
     });
 
+    // Log the Railpack plan for debugging
+    try {
+      const planContent = await fs.readFile(planPath, "utf8");
+      const plan = JSON.parse(planContent);
+      await appendLog(deploymentId, {
+        stage: "build",
+        level: "debug",
+        message: `Railpack plan: ${JSON.stringify({ 
+          deploy: { 
+            startCommand: plan?.deploy?.startCommand,
+            cmd: plan?.deploy?.cmd,
+            start: plan?.deploy?.start 
+          } 
+        })}`,
+      });
+    } catch {
+      // ignore logging errors
+    }
+
     await patchRailpackPlanRelaxedLockfile(planPath, deploymentId);
 
-    const inferredPort = await inferContainerPortFromPlan(planPath);
-    containerPort = inferredPort ?? containerPort;
+    const planInfo = await inferContainerPortFromPlan(planPath);
+    containerPort = planInfo.port ?? containerPort;
     await appendLog(deploymentId, {
       stage: "build",
       level: "info",
-      message: `Container port: ${containerPort}`,
+      message: `Container port: ${containerPort}${planInfo.startCommand ? ` (start: ${planInfo.startCommand.slice(0, 100)})` : ""}`,
     });
 
     const addr = (process.env.BUILDKIT_HOST ?? "").trim();

@@ -1,3 +1,4 @@
+import { logger } from "../../config/logger.js";
 import { deploymentAppHostname } from "../../deploymentAppHost.js";
 import { dynamicDir, registerDeploymentRouteWithReload } from "../../caddyClient.js";
 import type { DeployResult, RunResult, StageContext } from "./resultTypes.js";
@@ -12,10 +13,14 @@ export async function runServeStage(ctx: StageContext, deploy: DeployResult): Pr
   const upstreamHost = (process.env.BRIMBLE_DOCKER_UPSTREAM_HOST ?? "host.docker.internal").replace(/\/$/, "");
   const upstream = `http://${upstreamHost}:${deploy.port}`;
 
+  logger.info({ host, upstream, dynamicDir: dynamicDir ?? "not set" }, "Running serve stage");
+
   if (dynamicDir) {
-    await registerDeploymentRouteWithReload({ host, upstream });
+    const result = await registerDeploymentRouteWithReload({ host, upstream });
+    logger.info({ file: result.file, note: result.note }, "Caddy route registration complete");
     return { url: `http://${host}` };
   }
   const base = (process.env.BRIMBLE_APP_PUBLIC_BASE ?? "http://localhost").replace(/\/$/, "");
+  logger.info({ base, port: deploy.port }, "Using direct port URL (no Caddy)");
   return { url: `${base}:${deploy.port}` };
 }

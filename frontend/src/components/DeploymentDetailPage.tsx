@@ -16,6 +16,7 @@ import { useState } from "react";
 import { DeleteDeploymentModal } from "./modals/DeleteDeploymentModal.js";
 import { RedeployModal } from "./modals/RedeployModal.js";
 import { EnvVarDisplay } from "./EnvVarDisplay.js";
+import { useToastActions } from "../hooks/useToast.js";
 
 function parseEnvVars(envVarsJson: string | null): Record<string, string> {
   if (!envVarsJson) return {};
@@ -36,8 +37,10 @@ export function DeploymentDetailPage() {
   });
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { showLoading, showSuccess, showError, removeToast } = useToastActions();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmRedeployOpen, setConfirmRedeployOpen] = useState(false);
+  const [deleteToastId, setDeleteToastId] = useState<string | null>(null);
 
   const q = useQuery({
     queryKey: queryKeys.deployment(deploymentId),
@@ -51,10 +54,35 @@ export function DeploymentDetailPage() {
 
   const del = useMutation({
     mutationFn: () => deleteDeployment(deploymentId),
-    onSuccess: async () => {
+    onMutate: () => {
+      // Close modal immediately for better UX
       setConfirmDeleteOpen(false);
+      // Show loading toast (minimum 2 seconds for visibility)
+      const toastId = showLoading("Deleting deployment...");
+      setDeleteToastId(toastId);
+    },
+    onSuccess: async () => {
+      // Remove loading toast immediately
+      if (deleteToastId) {
+        removeToast(deleteToastId);
+      }
+      // Show success toast briefly (1.5 seconds)
+      showSuccess("Deployment deleted", 1500);
+      // Invalidate queries and navigate immediately
       await qc.invalidateQueries({ queryKey: queryKeys.deployments() });
       void navigate({ to: "/" });
+    },
+    onError: (error) => {
+      // Remove loading toast immediately
+      if (deleteToastId) {
+        removeToast(deleteToastId);
+      }
+      // Show error toast (5 seconds)
+      const message = error instanceof ApiError 
+        ? error.message 
+        : "Failed to delete deployment";
+      showError(message, 5000);
+      setDeleteToastId(null);
     },
   });
 

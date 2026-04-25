@@ -1,3 +1,4 @@
+import { logger } from "./config/logger.js";
 import { URL_CONSTANTS } from "./config/constants.js";
 
 /**
@@ -5,7 +6,8 @@ import { URL_CONSTANTS } from "./config/constants.js";
  * Kept in one place for Caddy snippet filenames, stored URLs, and teardown.
  */
 export function deploymentAppHostname(deploymentName: string, deploymentId: string): string {
-  const domain = (process.env.BRIMBLE_APPS_BASE_DOMAIN ?? "localhost").replace(/^\./, "").replace(/\/$/, "");
+  const rawDomain = process.env.BRIMBLE_APPS_BASE_DOMAIN ?? "localhost";
+  const domain = rawDomain.replace(/^\./, "").replace(/\/$/, "");
   const safe =
     deploymentName
       .toLowerCase()
@@ -13,5 +15,7 @@ export function deploymentAppHostname(deploymentName: string, deploymentId: stri
       .replace(/^-+|-+$/g, "")
       .slice(0, URL_CONSTANTS.MAX_NAME_LENGTH) || "app";
   const short = deploymentId.slice(0, URL_CONSTANTS.ID_TRUNCATE_LENGTH);
-  return `${safe}-${short}.${domain}`;
+  const hostname = `${safe}-${short}.${domain}`;
+  logger.info({ deploymentName, deploymentId, rawDomain, domain, hostname }, "Generated deployment hostname");
+  return hostname;
 }

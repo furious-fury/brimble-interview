@@ -288,6 +288,7 @@ Modern frameworks support both **static site generation** (for Netlify/Vercel) a
 | **Next.js** | `output: 'export'` | `next start` | "Could not find production build in 'dist'" |
 | **SvelteKit** | `@sveltejs/adapter-static` | Node server | No server entry point |
 | **Nuxt** | `nitro: { preset: 'static' }` | `node .output/server/index.mjs` | Missing server bundle |
+| **Vite** | No `server.allowedHosts` | Dev server on nip.io | "Blocked request. This host is not allowed" |
 
 **Manifests as:**
 - Build stage: ✅ Success (static files generated)
@@ -330,6 +331,16 @@ const FRAMEWORK_CHECKERS: Record<string, ConfigChecker> = {
       return {
         issue: "Detected Nuxt with static nitro preset",
         // No auto-fix, just warning
+      };
+    }
+  },
+
+  // Vite: missing server.allowedHosts → blocks nip.io subdomains
+  vite: (cwd, content, configPath) => {
+    if (!content.includes("allowedHosts") && !content.includes("server:")) {
+      return {
+        issue: "Vite dev server blocks non-localhost hosts by default",
+        autoFix: addAllowedHostsToViteConfig(configPath, content),
       };
     }
   },
@@ -392,6 +403,7 @@ const FRAMEWORK_VALIDATORS = {
 | **Next.js** | `output: 'export'` | Silent success, runtime crash | ⚠️ Warning + auto-fix |
 | **SvelteKit** | `adapter-static` | Silent success, runtime crash | ⚠️ Warning (manual fix) |
 | **Nuxt** | `preset: 'static'` | Silent success, runtime crash | ⚠️ Warning (manual fix) |
+| **Vite** | No `allowedHosts` | "Blocked request" on nip.io | 🔧 Auto-fix: add `server.allowedHosts: 'all'` |
 | **All** | Missing output | Deploy succeeds, app 502s | ❌ Build fails with clear error |
 
 **Example Log Outputs:**
