@@ -122,10 +122,11 @@ Use '@sveltejs/adapter-node' for containerized server deployment.
 - **Function Size:** All functions under 50 lines through extraction and composition
 
 **Frontend:**
-- **Custom Hooks:** SSE log streaming encapsulated in `useLogStream.ts`
+- **Custom Hooks:** SSE log streaming in `useLogStream.ts`, toast notifications in `useToast.ts`
 - **Component Extraction:** LogViewer broken into `LogFilterButtons`, `ConnectionStatusBadge`, `LogEntryRow`, `LogTerminal`, `BuildTimer`
 - **Form Components:** Branch selection extracted to `BranchCombobox` with git auto-detection
 - **Modal Components:** Confirmation modals are standalone (`DeleteDeploymentModal`, `RedeployModal`)
+- **Toast System:** ToastProvider/ToastContainer for success/error notifications (e.g., delete confirmation)
 - **Component Size:** All components under 50 lines through single-responsibility extraction
 
 ## API
@@ -191,6 +192,7 @@ Given another weekend, I would add:
 
 **Observability**
 - ✅ ~~Structured logging (JSON) with correlation IDs across pipeline stages~~ **DONE (Phase 10)**
+- ✅ ~~Toast notifications for user actions (delete, redeploy, errors)~~ **DONE**
 - Prometheus metrics: build duration, deploy success rate, queue depth
 - Distributed tracing: OpenTelemetry spans from API → pipeline → Docker
 

@@ -445,6 +445,7 @@ The detection system can easily add:
 - Admin API client (port 2019)
 - Writes per-deployment route snippets
 - Snippet location: `caddy/dynamic/{deploymentId}.caddy`
+- **Debug logging:** Comprehensive logging for route registration and reload operations
 
 **Route Snippet Format**:
 ```caddy
@@ -453,10 +454,25 @@ http://{app-name}-{8chars}.{domain} {
 }
 ```
 
+**Dynamic Route Ordering (Critical Fix)**:
+Dynamic site blocks are **inserted before** the catch-all `:80` block to ensure specific host matches take precedence. Without this, requests fall through to the default frontend handler.
+
 **Shared Volume**:
 - `caddy/dynamic/` mounted in both Caddy and backend containers
 - Backend writes `.caddy` files
 - Caddy watches and auto-reloads
+
+**Debugging Caddy Routing**:
+```bash
+# Check running Caddy config
+docker compose exec caddy wget -qO- http://localhost:2019/config/
+
+# Check dynamic route files
+docker compose exec caddy ls -la /etc/caddy/dynamic/
+
+# Test a specific host
+docker compose exec caddy wget -qO- --header="Host: myapp-12345678.localhost" http://localhost/
+```
 
 #### 5. Log Streaming
 
@@ -541,6 +557,7 @@ queryKeys.repoBranches(url) // ["repos", "branches", url]
 **Polling**:
 - Deployments list: Polls every 3s if any deployment is in-flight
 - Single deployment: Polls every 3s if not terminal state
+- **Delete handling:** Sets `isDeleted` flag to disable polling, cancels in-flight queries, and removes cached data before navigating to prevent 404 flash
 
 #### 3. Forms
 
@@ -575,6 +592,33 @@ queryKeys.repoBranches(url) // ["repos", "branches", url]
 - Stage filtering (all/build/deploy/runtime)
 - Auto-scroll to bottom
 - Height: `max-h-[min(70vh,600px)]`
+
+#### 5. Toast Notification System
+
+**Components**:
+- `ToastProvider.tsx` — Context provider for toast state management
+- `ToastContainer.tsx` — Renders toast stack with animations
+- `useToast.ts` — Hook for showing/hiding toasts
+
+**Usage**:
+```typescript
+const { showSuccess, showError, showLoading, removeToast } = useToastActions();
+
+// Loading toast (returns ID for later removal)
+const toastId = showLoading("Deleting deployment...");
+
+// Success toast (auto-dismisses after 1.5s)
+showSuccess("Deployment deleted successfully");
+
+// Error toast (persists 5s or until dismissed)
+showError("Failed to delete deployment", 5000);
+```
+
+**Features**:
+- Auto-dismiss with configurable duration
+- Manual dismiss via click or `removeToast(id)`
+- Multiple toast types: success (green), error (red), loading (spinner)
+- Prevents toast accumulation during rapid actions
 
 ---
 
@@ -1128,6 +1172,20 @@ export const URL = {
 
 #### 1. Custom Hooks for Complex Logic
 
+**useToast.ts** - Toast notification system:
+```typescript
+export function useToastActions() {
+  const { addToast, removeToast } = useContext(ToastContext);
+  
+  return {
+    showSuccess: (message: string, duration?: number) => {...},
+    showError: (message: string, duration?: number) => {...},
+    showLoading: (message: string) => string, // returns toastId
+    removeToast: (id: string) => void,
+  };
+}
+```
+
 **useLogStream.ts** - Complete SSE management:
 ```typescript
 export function useLogStream(deploymentId: string, enabled: boolean) {
@@ -1209,7 +1267,8 @@ Confirmation modals extracted as standalone components:
 | **Frontend Components >50 lines** | 8 | 0 |
 | **console.* calls** | 45 | 0 |
 | **Reusable extracted components** | 0 | 12 |
-| **Custom hooks** | 0 | 1 |
+| **Custom hooks** | 0 | 2 |
+| **Toast notifications** | 0 | ✅ Implemented |
 
 ### Benefits of This Refactoring
 
@@ -1245,6 +1304,10 @@ Confirmation modals extracted as standalone components:
 7. **Post-build validation**: Verifies expected build outputs (`.next/`, `dist/`, etc.) exist before declaring build success
 8. **Structured logging (Phase 10)**: Replaced all `console.*` with Pino for production-grade observability
 9. **Code organization (Phase 10)**: All functions under 50 lines, components extracted to single-responsibility units, constants centralized
+10. **Toast notification system**: User feedback for actions (delete, redeploy, errors) with loading/success/error states
+11. **Caddy route ordering fix**: Dynamic routes inserted before catch-all block to prevent fall-through to frontend
+12. **Caddy debug logging**: Comprehensive logging for route registration, hostname generation, and config reloading
+13. **Delete navigation fix**: Prevents 404 flash by disabling polling and clearing cached data before navigation
 
 ### Tested Platforms
 

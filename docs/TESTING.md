@@ -37,12 +37,17 @@ bash scripts/compose-validate.sh --smoke
 
 Use a full `docker compose up` (or local backend + frontend) and work through this list.
 
+**UI Feedback (Toast Notifications):**
+- Delete deployment → Should show "Deleting..." loading toast, then "Deployment deleted" success toast, then navigate to hub
+- Redeploy → Should show success/error toast
+- Create deployment → Should handle validation errors with toast notifications
+
 1. **Create from Git** — A small public repo (e.g. static or minimal Node) completes build → deploy → `running` (or `failed` with a clear log line).
 2. **Create from upload** — A valid `.zip` of a tiny app; pipeline starts and logs appear.
 3. **List** — Hub table shows the deployment, status, URL when available, timestamps; refresh or polling updates status while the pipeline is active.
 4. **Detail + logs** — Open the deployment, SSE log stream shows build/deploy/runtime (as applicable); filters by stage work; new lines auto-scroll.
 5. **App URL** — If Caddy is configured (`CADDY_DYNAMIC_DIR`), the stored vhost `http://<host>` opens the app; without Caddy, direct `BRIMBLE_APP_PUBLIC_BASE:port` works.
-6. **Delete** — Removes deployment, `destroy` runs (no stray container on host), and Caddy snippet is removed if Phase 7 paths are set.
+6. **Delete** — Removes deployment, `destroy` runs (no stray container on host), Caddy snippet is removed, and UI navigates to hub without 404 flash. Toast notification confirms deletion.
 7. **Sample app types (manual)** — Repeat 1 with: a static site, a small Node app, a small Python app (per project constraints), as time allows; not required for `npm test`.
 
 ## Optional: browser E2E

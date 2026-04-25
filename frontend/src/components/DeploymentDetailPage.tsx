@@ -42,14 +42,18 @@ export function DeploymentDetailPage() {
   const [confirmRedeployOpen, setConfirmRedeployOpen] = useState(false);
   const [deleteToastId, setDeleteToastId] = useState<string | null>(null);
 
+  const [isDeleted, setIsDeleted] = useState(false);
+
   const q = useQuery({
     queryKey: queryKeys.deployment(deploymentId),
     queryFn: () => getDeployment(deploymentId),
     refetchInterval: (query) => {
+      if (isDeleted) return false;
       const d = query.state.data;
       if (!d) return 3000;
       return shouldPollSingle(d.status) ? 3000 : false;
     },
+    enabled: !isDeleted,
   });
 
   const del = useMutation({
@@ -62,13 +66,18 @@ export function DeploymentDetailPage() {
       setDeleteToastId(toastId);
     },
     onSuccess: async () => {
+      // Mark as deleted to stop polling
+      setIsDeleted(true);
+      // Cancel and remove the deployment query to prevent 404 errors
+      await qc.cancelQueries({ queryKey: queryKeys.deployment(deploymentId) });
+      qc.removeQueries({ queryKey: queryKeys.deployment(deploymentId) });
       // Remove loading toast immediately
       if (deleteToastId) {
         removeToast(deleteToastId);
       }
       // Show success toast briefly (1.5 seconds)
       showSuccess("Deployment deleted", 1500);
-      // Invalidate queries and navigate immediately
+      // Invalidate the deployments list and navigate
       await qc.invalidateQueries({ queryKey: queryKeys.deployments() });
       void navigate({ to: "/" });
     },
