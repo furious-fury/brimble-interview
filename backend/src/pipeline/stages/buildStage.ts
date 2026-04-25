@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { appendLog } from "../../services/logService.js";
+import { prisma } from "../../db/prisma.js";
 import { runRailpackBuild } from "../railpack/runRailpackBuild.js";
 import { cleanupDeploymentWorkspace } from "../workspace/cleanup.js";
 import { gitCloneToWorkspace } from "../workspace/gitClone.js";
@@ -133,7 +134,20 @@ export async function runBuildStage(ctx: StageContext): Promise<BuildResult> {
     if (deployment.sourceType === "git") {
       const ref = deployment.sourceRef?.trim() || PIPELINE_CONSTANTS.DEFAULT_BRANCH;
       await logCloneStart(id, deployment.source, ref);
-      await gitCloneToWorkspace(deployment.source, ref, id);
+      const { commitId } = await gitCloneToWorkspace(deployment.source, ref, id);
+      
+      // Save commit ID to database if captured
+      if (commitId) {
+        await prisma.deployment.update({
+          where: { id },
+          data: { commitId },
+        });
+        await appendLog(id, {
+          stage: "build",
+          level: "info",
+          message: `Commit: ${commitId.slice(0, 7)}`,
+        });
+      }
     } else if (deployment.sourceType === "upload") {
       if (deployment.source === "pending") {
         throw new Error("Upload source is not ready (still pending)");

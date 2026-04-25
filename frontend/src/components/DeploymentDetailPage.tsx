@@ -210,20 +210,34 @@ export function DeploymentDetailPage() {
           {d.sourceRef && (
             <p className="mt-1 text-sm text-slate-500">Ref: {d.sourceRef}</p>
           )}
+          {d.commitId && (
+            <p className="mt-1 text-sm text-slate-500 font-mono">
+              Commit: <span className="text-xs">{d.commitId.slice(0, 7)}</span>
+            </p>
+          )}
         </div>
         <div className="rounded-sm border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
             Network
           </p>
-          <p className="mt-1 text-sm text-slate-700">
-            {d.port != null ? (
+          {d.url ? (
+            <a 
+              href={d.url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 block break-all text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              {d.url}
+            </a>
+          ) : d.port != null ? (
+            <p className="mt-1 text-sm text-slate-700">
               <span>
                 Port <span className="font-mono tabular-nums">{d.port}</span> (host)
               </span>
-            ) : (
-              <span className="text-slate-400">—</span>
-            )}
-          </p>
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-slate-400">—</p>
+          )}
         </div>
       </div>
 

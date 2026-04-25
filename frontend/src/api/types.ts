@@ -13,6 +13,7 @@ export interface Deployment {
   sourceType: SourceType;
   source: string;
   sourceRef: string | null;
+  commitId: string | null;
   status: DeploymentStatus;
   imageTag: string | null;
   containerId: string | null;

@@ -128,6 +128,7 @@ model Deployment {
   sourceType  SourceType        // git | upload
   source      String            // Git URL or extracted path
   sourceRef   String?           // Git branch/tag
+  commitId    String?           // Git commit hash (7 chars displayed in UI)
   status      DeploymentStatus // pending → building → deploying → running | failed
   imageTag    String?           // Built image reference
   containerId String?           // Docker container ID
@@ -165,10 +166,11 @@ model Log {
 
 **Build Stage** (`pipeline/stages/buildStage.ts`):
 1. Clone git repo or extract uploaded archive (ZIP/tar.gz)
-2. Auto-detect single top-level folder in archives (handles folder-zipping on macOS/Windows)
-3. Run `railpack build` via BuildKit
-4. Push to local registry (avoids "sending tarball" issues)
-5. Store image tag in deployment
+2. **Capture commit ID:** After cloning, runs `git rev-parse HEAD` to get the exact commit hash
+3. Auto-detect single top-level folder in archives (handles folder-zipping on macOS/Windows)
+4. Run `railpack build` via BuildKit
+5. Push to local registry (avoids "sending tarball" issues)
+6. Store image tag and commit ID in deployment
 
 **Deploy Stage** (`pipeline/stages/deployStage.ts`):
 1. Allocate host port (10000-11000 range)
@@ -700,13 +702,14 @@ Backend:
   
 Pipeline (async):
   1. Update status → building
-  2. Clone repo
+  2. Clone repo → capture commit ID (`git rev-parse HEAD`)
   3. railpack build (via BuildKit)
   4. Push to registry
   5. Update status → deploying
   6. Allocate port, create container
   7. Write Caddy route
   8. Update status → running, set url
+  9. Save commitId to database for display in UI
   
 Frontend:
   - Polls deployment status
@@ -1286,7 +1289,7 @@ Confirmation modals extracted as standalone components:
 
 | Category | Features |
 |----------|----------|
-| **Deployment Sources** | Git repositories (HTTPS/SSH), ZIP/tar.gz uploads, branch auto-detection |
+| **Deployment Sources** | Git repositories (HTTPS/SSH), ZIP/tar.gz uploads, branch auto-detection, **commit ID capture** |
 | **Build System** | Railpack auto-detection (Node/Python/Go/etc.), BuildKit, local registry |
 | **Runtime** | Docker container management, dynamic port allocation (10000-11000), health polling |
 | **Networking** | Caddy reverse proxy, nip.io wildcard DNS, automatic vhost routing |
@@ -1308,6 +1311,7 @@ Confirmation modals extracted as standalone components:
 11. **Caddy route ordering fix**: Dynamic routes inserted before catch-all block to prevent fall-through to frontend
 12. **Caddy debug logging**: Comprehensive logging for route registration, hostname generation, and config reloading
 13. **Delete navigation fix**: Prevents 404 flash by disabling polling and clearing cached data before navigation
+14. **Git commit tracking**: Captures exact commit hash during clone for traceability, displays short hash (7 chars) in UI alongside branch/tag
 
 ### Tested Platforms
 

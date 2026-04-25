@@ -137,7 +137,7 @@ Base path: `/api`
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
 | `GET` | `/deployments` | List deployments (`?limit=1-500`, default 100) |
-| `POST` | `/deployments` | Create from git (JSON: `name`, `source`, `ref?`, `envVars?`) |
+| `POST` | `/deployments` | Create from git (JSON: `name`, `source`, `ref?`, `envVars?`) → captures commit hash |
 | `POST` | `/deployments/upload` | Create from ZIP/tar.gz archive (`multipart/form-data`, max 100MB) |
 | `GET` | `/deployments/:id` | Get deployment details |
 | `POST` | `/deployments/:id/redeploy` | Destroy runtime, clear logs, rebuild & redeploy |
@@ -145,7 +145,9 @@ Base path: `/api`
 | `GET` | `/deployments/:id/logs` | **SSE** log stream (replay last 500, then live) |
 | `GET` | `/repos/branches?url=` | List git branches for a repository |
 
-**Pipeline Stages:** `pending` → `building` (clone, Railpack, BuildKit) → `deploying` (allocate port, start container) → `running` (Caddy vhost active, health polling). On failure: `failed`. Runtime logs stream with `stage: "runtime"`. Health checks every `BRIMBLE_HEALTH_POLL_MS` (15s) auto-mark stopped containers as failed.
+**Pipeline Stages:** `pending` → `building` (clone, Railpack, BuildKit, captures **commit hash** for git sources) → `deploying` (allocate port, start container) → `running` (Caddy vhost active, health polling). On failure: `failed`. Runtime logs stream with `stage: "runtime"`. Health checks every `BRIMBLE_HEALTH_POLL_MS` (15s) auto-mark stopped containers as failed.
+
+**Deployment Details:** Git deployments display the short commit hash (7 chars) alongside the branch/tag reference for traceability.
 
 ## Cloud Deployment
 

@@ -23,7 +23,7 @@ export async function gitCloneToWorkspace(
   remoteUrl: string,
   ref: string,
   deploymentId: string
-): Promise<void> {
+): Promise<{ commitId: string | null }> {
   const workRoot = getDeploymentWorkspaceDir(deploymentId);
   const dest = getExtractedSourceDir(deploymentId);
   ensureDirSync(workRoot);
@@ -36,4 +36,17 @@ export async function gitCloneToWorkspace(
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     maxBuffer: GIT_CONSTANTS.MAX_BUFFER_SIZE,
   });
+
+  // Capture the commit ID of the cloned HEAD
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", dest, "rev-parse", "HEAD"],
+      { maxBuffer: 1024 }
+    );
+    const commitId = stdout.trim();
+    return { commitId };
+  } catch {
+    return { commitId: null };
+  }
 }

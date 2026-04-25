@@ -47,6 +47,7 @@ Use a full `docker compose up` (or local backend + frontend) and work through th
 3. **List** — Hub table shows the deployment, status, URL when available, timestamps; refresh or polling updates status while the pipeline is active.
 4. **Detail + logs** — Open the deployment, SSE log stream shows build/deploy/runtime (as applicable); filters by stage work; new lines auto-scroll.
 5. **App URL** — If Caddy is configured (`CADDY_DYNAMIC_DIR`), the stored vhost `http://<host>` opens the app; without Caddy, direct `BRIMBLE_APP_PUBLIC_BASE:port` works.
+   - **Commit ID** — For git deployments, the UI should display the short commit hash (7 chars) under the branch/tag reference in the Source section.
 6. **Delete** — Removes deployment, `destroy` runs (no stray container on host), Caddy snippet is removed, and UI navigates to hub without 404 flash. Toast notification confirms deletion.
 7. **Sample app types (manual)** — Repeat 1 with: a static site, a small Node app, a small Python app (per project constraints), as time allows; not required for `npm test`.
 

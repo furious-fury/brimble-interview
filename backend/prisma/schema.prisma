@@ -42,6 +42,7 @@ model Deployment {
   sourceType  SourceType
   source      String
   sourceRef   String?
+  commitId    String?
   status      DeploymentStatus   @default(pending)
   imageTag    String?
   containerId String?
