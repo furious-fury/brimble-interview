@@ -49,18 +49,18 @@ User → Caddy (:80) → Frontend (Vite) + Backend API (Express)
 3. Docker pulls and runs container → Caddy routes traffic via dynamic vhost
 4. Real-time logs stream via SSE throughout
 
-## Tradeoffs & Design Decisions
+## Design Decisions
 
-| Decision | Chosen Approach | Rationale | Tradeoff |
-|----------|----------------|-----------|----------|
-| **Architecture** | Single-node | Reduced complexity, fully observable, debuggable; matches JD constraint | Not horizontally scalable |
-| **Job Queue** | In-memory (`async` library) | Zero infrastructure; `async` provides backpressure | Limited to one worker process |
-| **Database** | SQLite file-backed | Zero setup, easy backups; no distributed deps | No concurrent write scaling |
-| **Routing** | Caddy file-based vhosts | Simple, debuggable; backend writes files, no API calls | Doesn't scale to 1000s of apps |
-| **Build Output** | Local registry push/pull | Avoids BuildKit tarball hangs (see Challenges) | Requires registry container |
-| **Log Streaming** | SSE over WebSockets | Native reconnect with `Last-Event-ID`, HTTP-compatible, no handshake overhead | Not ideal for bi-directional |
-| **Builder** | Railpack + BuildKit | Auto-detects languages (Node/Python/Go), no Dockerfiles | Adds complexity over simple Docker builds |
-| **DNS** | nip.io wildcard | `*.IP.nip.io` resolves to IP; zero DNS config for any IP | Dependency on external service |
+| Decision | Chosen Approach | Rationale |
+|----------|----------------|-----------|
+| **Architecture** | Single-node | Reduced complexity, fully observable, debuggable; matches JD constraint |
+| **Job Queue** | In-memory (`async` library) | Zero infrastructure; `async` provides backpressure |
+| **Database** | SQLite file-backed | Zero setup, easy backups; no distributed deps |
+| **Routing** | Caddy file-based vhosts | Simple, debuggable; backend writes files, no API calls |
+| **Build Output** | Local registry push/pull | Avoids BuildKit tarball hangs (see Challenges) |
+| **Log Streaming** | SSE over WebSockets | Native reconnect with `Last-Event-ID`, HTTP-compatible, no handshake overhead |
+| **Builder** | Railpack + BuildKit | Auto-detects languages (Node/Python/Go), no Dockerfiles |
+| **DNS** | nip.io wildcard | `*.IP.nip.io` resolves to IP; zero DNS config for any IP |
 
 ## Notable Challenges
 
