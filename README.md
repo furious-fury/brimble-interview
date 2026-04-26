@@ -13,6 +13,9 @@ The system is intentionally designed to be **simple, observable, and reliable**,
 ## Quick Start
 
 ```bash
+cd backend
+cp .env.example .env
+cd ..
 docker compose up --build
 ```
 
